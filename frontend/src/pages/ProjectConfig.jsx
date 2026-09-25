@@ -10,6 +10,7 @@ import { TagDialog } from "@/components/config/TagDialog";
 import { LibraryPanel } from "@/components/config/LibraryPanel";
 import { SecurityPanel } from "@/components/config/SecurityPanel";
 import { SettingsPanel } from "@/components/config/SettingsPanel";
+import { DataAlarmPanel } from "@/components/config/DataAlarmPanel";
 
 const ST = { online: "bg-emerald-500 text-emerald-400", simulasi: "bg-cyan-500 text-cyan-400", internal: "bg-violet-500 text-violet-300", offline: "bg-red-500 text-red-400", menunggu: "bg-slate-500 text-slate-400" };
 
@@ -70,7 +71,7 @@ export default function ProjectConfig() {
         <span className="font-heading font-bold text-sm">{project.name}</span>
         <nav className="flex items-center ml-4 text-xs">
           <Link to={`/projects/${id}/editor`} data-testid="nav-editor-link" className="px-3 h-8 flex items-center gap-1.5 text-slate-400 hover:text-white"><LayoutDashboard size={13} />Layar HMI</Link>
-          {[["devices", "Perangkat & Tag"], ["library", "Library Alamat"], ["security", "Keamanan"], ["settings", "Pengaturan"]].map(([k, l]) => (
+          {[["devices", "Perangkat & Tag"], ["library", "Library Alamat"], ["data", "Data & Alarm"], ["security", "Keamanan"], ["settings", "Pengaturan"]].map(([k, l]) => (
             <button key={k} data-testid={`config-tab-${k}`} onClick={() => setTab(k)} className={`px-3 h-8 border-b-2 transition-colors ${tab === k ? "border-blue-500 text-white font-semibold" : "border-transparent text-slate-400 hover:text-white"}`}>{l}</button>
           ))}
         </nav>
@@ -80,6 +81,7 @@ export default function ProjectConfig() {
       {tab !== "devices" && (
         <main className="max-w-7xl mx-auto px-6 lg:px-10 py-10">
           {tab === "library" && <LibraryPanel projectId={id} devices={devices} tags={tags} protocols={protocols} onReload={load} onNewTag={(preset) => setTagDlg({ open: true, tag: null, preset })} onEditTag={(t) => setTagDlg({ open: true, tag: t })} />}
+          {tab === "data" && <DataAlarmPanel project={project} tags={tags} onSaved={load} />}
           {tab === "security" && <SecurityPanel project={project} />}
           {tab === "settings" && <SettingsPanel project={project} onSaved={load} />}
         </main>

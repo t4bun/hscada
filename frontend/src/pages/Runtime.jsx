@@ -3,7 +3,8 @@ import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Maximize, Minimize, BellRing, Wifi, WifiOff, MonitorPlay, X } from "lucide-react";
 import { api, errMsg, setClientToken } from "@/lib/api";
-import { RtContext, useLive, useFonts } from "@/hooks/useLive";
+import { RtContext, useLive, useFonts, useRecords } from "@/hooks/useLive";
+import { PdfDialog } from "@/components/runtime/PdfDialog";
 import { ScreenView } from "@/components/widgets/Widget";
 import { LoginGate, UserMenu } from "@/components/runtime/ClientAuth";
 
@@ -30,6 +31,17 @@ const useIdle = (enabled, minutes) => {
     return () => { evs.forEach((e) => window.removeEventListener(e, act)); clearInterval(t); };
   }, [enabled, minutes]);
   return idle;
+};
+
+const beep = () => {
+  try {
+    const C = window.AudioContext || window.webkitAudioContext;
+    const ctx = (beep.ctx ||= new C());
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = 880; g.gain.value = 0.15;
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.25);
+  } catch { /* audio unavailable */ }
 };
 
 const ScreenSaver = ({ name }) => {
@@ -67,6 +79,8 @@ export default function Runtime({ mode }) {
   const [screenId, setScreenId] = useState(null);
   const [subId, setSubId] = useState(null);
   const [fs, setFs] = useState(false);
+  const [pdfNo, setPdfNo] = useState(null);
+  const seen = useRef(new Set());
   const base = mode === "public" ? `/public/${slug}/rt` : `/projects/${id}/rt`;
 
   const load = useCallback(() => {
@@ -87,6 +101,7 @@ export default function Runtime({ mode }) {
   useEffect(() => { load(); }, [load]);
 
   const live = useLive(base, !!app);
+  const records = useRecords(app ? base : null, app ? 1 : 0);
   useFonts(app?.fonts);
   const scale = useFit(app?.width || 1280, app?.height || 720);
   const idle = useIdle(!!app?.settings?.screen_saver_enabled, app?.settings?.screen_saver_minutes);
@@ -120,8 +135,26 @@ export default function Runtime({ mode }) {
   const rt = useMemo(() => ({
     values: live.snap.values, ts: live.snap.ts, tagMap, mode: "run",
     allowOperate: !!app?.allow_operate && (!group || group.can_operate), canAck: !group || group.can_ack,
-    level: group ? group.level : 99, write: live.write, base, gotoScreen: nav.openScreen, ...nav,
-  }), [live.snap, tagMap, app, group, live.write, base, nav]);
+    level: group ? group.level : 99, write: live.write, base, records, exportPdf: setPdfNo, gotoScreen: nav.openScreen, ...nav,
+  }), [live.snap, tagMap, app, group, live.write, base, nav, records]);
+
+  useEffect(() => {
+    if (!app) return;
+    const canPop = (sid) => app.screens.some((s) => s.id === sid) && (!nav.allowed || nav.allowed(sid));
+    const tick = Math.floor(Date.parse(live.snap.ts || 0) / 1000);
+    (live.snap.alarm_events || []).forEach((a) => {
+      if (!seen.current.has(a.id)) {
+        seen.current.add(a.id);
+        if (a.beep) beep();
+        if (a.alarm_screen && canPop(a.alarm_screen)) setSubId(a.alarm_screen);
+        return;
+      }
+      if (a.acked) return;
+      if (a.beep && !a.beep_once && tick % 2 === 0) beep();
+      if (a.alarm_screen && !a.popup_once && canPop(a.alarm_screen)) setSubId((cur) => cur || a.alarm_screen);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.snap.ts]);
 
   useEffect(() => {
     const on = () => setFs(!!document.fullscreenElement);
@@ -165,6 +198,7 @@ export default function Runtime({ mode }) {
           </button>
         </div>
         {idle && <ScreenSaver name={app.name} />}
+        <PdfDialog no={pdfNo} base={base} onClose={() => setPdfNo(null)} />
       </div>
     </RtContext.Provider>
   );

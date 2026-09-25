@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Area, Brush } from "recharts";
 import { Download, Check } from "lucide-react";
 import { useRt, usePolling } from "@/hooks/useLive";
 import { api } from "@/lib/api";
@@ -63,64 +63,105 @@ export const Trend = ({ p }) => {
 
 const Empty = () => <div className="h-full grid place-items-center text-xs text-slate-500 font-mono">Pilih tag di panel properti</div>;
 
-const useHistory = (tags, minutes, interval, limit = 3000) => {
-  const { base } = useRt();
-  const [rows, setRows] = useState([]);
-  usePolling(async (alive) => {
-    if (!base || !tags.length) return;
-    try {
-      const { data } = await api.get(`${base}/history`, { params: { tags: tags.join(","), minutes, limit } });
-      if (alive()) setRows(pivot(data));
-    } catch { /* ignore */ }
-  }, [base, tags.join(","), minutes], interval);
-  return rows;
+const pad = (n) => String(n).padStart(2, "0");
+export const fmtTs = (t, df = "DD/MM", tf = "HH:mm:ss") => {
+  const d = new Date(t);
+  const date = { none: "", "DD/MM": `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`, "DD/MM/YY": `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`,
+    "MM/DD": `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`, "YYYY-MM-DD": `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }[df] ?? "";
+  const time = { none: "", "HH:mm": `${pad(d.getHours())}:${pad(d.getMinutes())}`, "HH:mm:ss": `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` }[tf] ?? "";
+  return [date, time].filter(Boolean).join(" ");
 };
+const flat = (rows) => rows.map((r) => ({ t: new Date(r.ts).getTime(), ...r.v }));
+const SPAN_MS = { min: 60000, hour: 3600000, day: 86400000 };
+const toLocalInput = (ms) => { const d = new Date(ms - new Date().getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
 
 export const HistoryTrend = ({ p }) => {
-  const { tagMap } = useRt();
-  const tags = (p.tags || []).filter((t) => tagMap[t]);
-  const [range, setRange] = useState(Number(p.minutes) || 30);
-  useEffect(() => setRange(Number(p.minutes) || 30), [p.minutes]);
-  const rows = useHistory(tags, range, 10000, 5000);
+  const { base, records } = useRt();
+  const rec = (records || []).find((r) => r.number === Number(p.record_no));
+  const span = Math.max(1, Number(p.span_value) || 30) * (SPAN_MS[p.span_unit] || 60000);
+  const [start, setStart] = useState(null);
+  useEffect(() => setStart(p.start_option === "custom" ? Date.now() - span : null), [p.start_option, span]);
+  const [rows, setRows] = useState([]);
+  usePolling(async (alive) => {
+    if (!base || !rec) return;
+    const end = start === null ? Date.now() : start + span;
+    const s = start === null ? end - span : start;
+    try {
+      const { data } = await api.get(`${base}/records/${rec.number}/samples`, { params: { start: new Date(s).toISOString(), end: new Date(end).toISOString(), limit: 5000 } });
+      if (alive()) setRows(flat(data));
+    } catch { /* ignore */ }
+  }, [base, rec?.number, start, span], start === null ? 5000 : 0);
+  const lines = (rec?.channels || []).map((c, i) => ({ tag_id: c.tag_id, name: c.name, enabled: true, type: "line", width: 2, color: SERIES_COLORS[i % SERIES_COLORS.length], ...(p.lines || []).find((l) => l.tag_id === c.tag_id) })).filter((l) => l.enabled);
+  const shift = (d) => setStart((s) => (s === null ? Date.now() - span : s) + d * span);
+  const btn = "px-1.5 text-[10px] font-mono rounded-sm text-slate-400 hover:text-white";
   const right = (
-    <div className="flex gap-1">
-      {[5, 30, 60, 360, 1440].map((m) => (
-        <button key={m} data-testid={`history-range-${m}`} onClick={() => setRange(m)} className={`px-1.5 text-[10px] font-mono rounded-sm ${range === m ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}>
-          {m < 60 ? `${m}m` : `${m / 60}j`}
-        </button>
-      ))}
+    <div className="flex items-center gap-1">
+      <button data-testid="history-prev" onClick={() => shift(-1)} className={btn}>◀</button>
+      {start !== null && <input data-testid="history-start-input" type="datetime-local" value={toLocalInput(start)} onChange={(e) => e.target.value && setStart(new Date(e.target.value).getTime())} className="bg-transparent text-[10px] text-slate-300 font-mono w-36" />}
+      <button data-testid="history-next" onClick={() => shift(1)} className={btn}>▶</button>
+      <button data-testid="history-now" onClick={() => setStart(null)} className={`${btn} ${start === null ? "bg-blue-600 text-white" : ""}`}>NOW</button>
     </div>
   );
-  return <Frame title={p.title} right={right}>{tags.length ? <Chart data={rows} tags={tags} tagMap={tagMap} /> : <Empty />}</Frame>;
+  if (!rec) return <Frame title={p.title}><div className="h-full grid place-items-center text-xs text-slate-500 font-mono">Data record #{p.record_no} belum dibuat</div></Frame>;
+  const dom = (v) => (v === "" || v == null ? "auto" : Number(v));
+  return (
+    <div className="w-full h-full" style={{ opacity: Number(p.opacity) || 1 }}>
+      <Frame title={`${p.title} · #${rec.number}`} right={right}>
+        <div className="w-full h-full" style={{ background: p.bg }}>
+          <ResponsiveContainer width="100%" height="100%" minWidth={50} minHeight={50}>
+            <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+              <CartesianGrid stroke={p.grid_color} />
+              <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} tickCount={(Number(p.x_grids) || 6) + 1} tickFormatter={(t) => fmtTs(t, p.date_format, p.time_format)} stroke="#475569" fontSize={10} tick={{ fill: "#64748B" }} />
+              <YAxis domain={[dom(p.y_min), dom(p.y_max)]} allowDataOverflow tickCount={(Number(p.y_grids) || 5) + 1} stroke="#475569" fontSize={10} tick={{ fill: "#64748B" }} />
+              <Tooltip labelFormatter={(t) => fmtTs(t, "DD/MM/YY", "HH:mm:ss")} contentStyle={{ background: "#0B0F17", border: "1px solid #1E293B", fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              {lines.map((l) => l.type === "area"
+                ? <Area key={l.tag_id} dataKey={l.tag_id} name={l.name} stroke={l.color} fill={l.color} fillOpacity={0.2} strokeWidth={Number(l.width) || 2} isAnimationActive={false} connectNulls />
+                : <Line key={l.tag_id} dataKey={l.tag_id} name={l.name} type={l.type === "step" ? "stepAfter" : "linear"} stroke={l.color} strokeWidth={Number(l.width) || 2} strokeDasharray={l.type === "dashed" ? "6 4" : undefined} dot={false} isAnimationActive={false} connectNulls />)}
+              {p.show_slider && rows.length > 1 && <Brush dataKey="t" height={16} stroke="#3B82F6" fill="#0B0F17" tickFormatter={(t) => fmtTs(t, "none", "HH:mm")} />}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </Frame>
+    </div>
+  );
 };
 
 export const DataRecord = ({ p }) => {
-  const { tagMap } = useRt();
-  const tags = (p.tags || []).filter((t) => tagMap[t]);
+  const { base, records } = useRt();
+  const rec = (records || []).find((r) => r.number === Number(p.record_no));
   const n = Math.max(1, Number(p.rows) || 20);
-  const rows = useHistory(tags, 1440, 5000, n * Math.max(tags.length, 1)).slice(-n).reverse();
+  const [rows, setRows] = useState([]);
+  usePolling(async (alive) => {
+    if (!base || !rec) return;
+    try {
+      const { data } = await api.get(`${base}/records/${rec.number}/samples`, { params: { minutes: 10080, limit: n } });
+      if (alive()) setRows(flat(data).reverse());
+    } catch { /* ignore */ }
+  }, [base, rec?.number, n], 5000);
+  if (!rec) return <Frame title={p.title}><div className="h-full grid place-items-center text-xs text-slate-500 font-mono">Data record #{p.record_no} belum dibuat</div></Frame>;
+  const ch = rec.channels;
   const csv = () => {
-    const head = ["Waktu", ...tags.map((t) => tagMap[t].name)].join(",");
-    const body = rows.map((r) => [new Date(r.t).toLocaleString("id-ID"), ...tags.map((t) => r[t] ?? "")].join(",")).join("\n");
+    const head = ["Waktu", ...ch.map((c) => c.name)].join(",");
+    const body = rows.map((r) => [new Date(r.t).toLocaleString("id-ID"), ...ch.map((c) => r[c.tag_id] ?? "")].join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([`${head}\n${body}`], { type: "text/csv" }));
-    a.download = "data-record.csv";
+    a.download = `data-record-${rec.number}.csv`;
     a.click();
   };
   const right = <button data-testid="data-record-export" onClick={csv} className="text-slate-400 hover:text-white flex items-center gap-1 text-[10px] font-mono"><Download size={12} />CSV</button>;
-  if (!tags.length) return <Frame title={p.title}><Empty /></Frame>;
   return (
-    <Frame title={p.title} right={right}>
+    <Frame title={`${p.title} · #${rec.number}`} right={right}>
       <div className="h-full overflow-auto hmi-scroll">
         <table className="w-full text-[11px] font-mono">
           <thead className="sticky top-0 bg-[#111827] text-slate-400">
-            <tr><th className="text-left px-2 py-1 font-semibold">WAKTU</th>{tags.map((t) => <th key={t} className="text-right px-2 py-1 font-semibold">{tagMap[t].name}</th>)}</tr>
+            <tr><th className="text-left px-2 py-1 font-semibold">WAKTU</th>{ch.map((c) => <th key={c.tag_id} className="text-right px-2 py-1 font-semibold whitespace-nowrap">{c.name}</th>)}</tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.t} className="border-t border-slate-800/80 hover:bg-slate-800/40">
                 <td className="px-2 py-1 text-slate-400 whitespace-nowrap">{new Date(r.t).toLocaleString("id-ID", { hour12: false })}</td>
-                {tags.map((t) => <td key={t} className="px-2 py-1 text-right text-emerald-400">{r[t] === undefined ? "-" : Number(r[t]).toFixed(tagMap[t].decimals || 0)}</td>)}
+                {ch.map((c) => <td key={c.tag_id} className="px-2 py-1 text-right text-emerald-400">{r[c.tag_id] === undefined ? "-" : Number(r[c.tag_id]).toFixed(c.decimals || 0)}</td>)}
               </tr>
             ))}
           </tbody>
@@ -130,7 +171,7 @@ export const DataRecord = ({ p }) => {
   );
 };
 
-const LEVEL_CLS = { HH: "bg-red-600 text-white", LL: "bg-red-600 text-white", H: "bg-amber-500 text-black", L: "bg-amber-500 text-black", ON: "bg-red-500 text-white" };
+const LEVEL_CLS = { HH: "bg-red-600 text-white", LL: "bg-red-600 text-white", H: "bg-amber-500 text-black", L: "bg-amber-500 text-black", ON: "bg-red-500 text-white", BIT: "bg-red-500 text-white", HI: "bg-red-600 text-white", LO: "bg-amber-500 text-black", EQ: "bg-sky-500 text-black", RNG: "bg-fuchsia-600 text-white" };
 
 export const AlarmTable = ({ p }) => {
   const { base, mode, allowOperate, canAck } = useRt();
@@ -140,9 +181,9 @@ export const AlarmTable = ({ p }) => {
     if (!base) return;
     try {
       const { data } = await api.get(`${base}/alarms`, { params: { active_only: !!p.active_only, limit: 100 } });
-      if (alive()) setRows(data);
+      if (alive()) setRows(Number(p.group_no) ? data.filter((a) => Number(a.group ?? 1) === Number(p.group_no)) : data);
     } catch { /* ignore */ }
-  }, [base, p.active_only, bump], 2000);
+  }, [base, p.active_only, p.group_no, bump], 2000);
   const can = mode === "run" && (canAck ?? allowOperate);
   const ack = async (id) => { await api.post(`${base}/alarms/ack`, { alarm_id: id || null }).catch(() => {}); setBump((b) => b + 1); };
   const right = can && <button data-testid="alarm-ack-all" onClick={() => ack()} className="text-[10px] font-mono text-slate-300 hover:text-white border border-slate-600 px-1.5 rounded-sm">ACK SEMUA</button>;
@@ -151,12 +192,13 @@ export const AlarmTable = ({ p }) => {
       <div className="h-full overflow-auto hmi-scroll">
         <table className="w-full text-[11px] font-mono">
           <thead className="sticky top-0 bg-[#111827] text-slate-400">
-            <tr><th className="text-left px-2 py-1">WAKTU</th><th className="px-1">LVL</th><th className="text-left px-2">PESAN</th><th className="text-right px-2">NILAI</th><th className="px-2">STATUS</th></tr>
+            <tr><th className="text-left px-2 py-1">WAKTU</th><th className="px-1">GRP</th><th className="px-1">LVL</th><th className="text-left px-2">PESAN</th><th className="text-right px-2">NILAI</th><th className="px-2">STATUS</th></tr>
           </thead>
           <tbody>
             {rows.map((a) => (
               <tr key={a.id} data-testid="alarm-row" className={`border-t border-slate-800/80 ${a.active && !a.acked ? "hmi-alarm-row" : ""}`}>
                 <td className="px-2 py-1 text-slate-400 whitespace-nowrap">{new Date(a.ts_in).toLocaleTimeString("id-ID", { hour12: false })}</td>
+                <td className="px-1 text-center text-slate-500">{a.group ?? "-"}</td>
                 <td className="px-1 text-center"><span className={`px-1 rounded-sm text-[10px] font-bold ${LEVEL_CLS[a.level]}`}>{a.level}</span></td>
                 <td className={`px-2 ${a.active ? "text-slate-100" : "text-slate-500"}`}>{a.message}</td>
                 <td className="px-2 text-right text-slate-300">{Number(a.value).toFixed(1)}</td>
@@ -168,7 +210,7 @@ export const AlarmTable = ({ p }) => {
                 </td>
               </tr>
             ))}
-            {!rows.length && <tr><td colSpan={5} className="text-center text-slate-500 py-6">Tidak ada alarm</td></tr>}
+            {!rows.length && <tr><td colSpan={6} className="text-center text-slate-500 py-6">Tidak ada alarm</td></tr>}
           </tbody>
         </table>
       </div>

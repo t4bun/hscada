@@ -28,6 +28,62 @@ class Engine:
         self.tick = 0
         self.proj_order = {}
         self.loaded_internal = False
+        self.records, self.alarm_defs, self.text_lib = [], [], {}
+        self.rec_last = {}
+        self.def_active = {}
+        self.def_loaded = False
+
+    async def sample_records(self, t):
+        now = datetime.now(timezone.utc)
+        docs = []
+        for r in self.records:
+            if t - self.rec_last.get(r["id"], 0) < max(1, int(r.get("interval_s") or 5)) - 0.05:
+                continue
+            pv = self.values.get(r["project_id"], {})
+            vals = {c: float(pv[c]) for c in r.get("channels", []) if pv.get(c) is not None}
+            if vals:
+                docs.append({"project_id": r["project_id"], "record": r["number"], "ts": now, "v": vals})
+            self.rec_last[r["id"]] = t
+        if docs:
+            await self.db.record_samples.insert_many(docs)
+
+    @staticmethod
+    def def_state(d, v):
+        if d["kind"] == "bit":
+            return bool(v) == (d.get("condition") == "on")
+        v = float(v)
+        c = d.get("condition")
+        if c == "range":
+            return v < float(d["low"]) or v > float(d["high"])
+        lim = float(d.get("value") or 0)
+        return {"high": v >= lim, "low": v <= lim, "equal": v == lim}.get(c, False)
+
+    async def check_alarm_defs(self):
+        now = datetime.now(timezone.utc).isoformat()
+        names = {t["id"]: t["name"] for t in self.tags}
+        for d in self.alarm_defs:
+            v = self.values.get(d["project_id"], {}).get(d["tag_id"])
+            active = v is not None and self.def_state(d, v)
+            cur = self.def_active.get(d["id"])
+            if active and not cur:
+                aid = str(uuid.uuid4())
+                msg = self.text_lib.get(d["project_id"], {}).get(d.get("library_id")) or d.get("content") or f"{names.get(d['tag_id'], '?')} alarm"
+                level = "BIT" if d["kind"] == "bit" else {"high": "HI", "low": "LO", "equal": "EQ", "range": "RNG"}[d["condition"]]
+                await self.db.alarms.insert_one({
+                    "id": aid, "project_id": d["project_id"], "def_id": d["id"], "kind": d["kind"], "group": d.get("group", 1),
+                    "tag_id": d["tag_id"], "tag_name": names.get(d["tag_id"], ""), "level": level, "value": float(v), "message": msg,
+                    "active": True, "acked": False, "ts_in": now, "ts_out": None, "recorded": d.get("record", True),
+                    "beep": d.get("beep", False), "beep_once": d.get("beep_once", False),
+                    "alarm_screen": d.get("alarm_screen", ""), "popup_once": d.get("popup_once", True),
+                })
+                self.def_active[d["id"]] = aid
+            elif not active and cur:
+                self.def_active.pop(d["id"], None)
+                if not d.get("record", True):
+                    await self.db.alarms.delete_one({"id": cur})
+                else:
+                    upd = {"active": False} if d.get("not_save_off") else {"active": False, "ts_out": now}
+                    await self.db.alarms.update_one({"id": cur}, {"$set": upd})
 
     def with_order(self, dev):
         return {**dev, "_order": dev.get("byte_order") or self.proj_order.get(dev["project_id"], "ABCD")}
@@ -37,6 +93,14 @@ class Engine:
         return dev.get("protocol") == "internal"
 
     async def load_config(self):
+        self.records = await self.db.data_records.find({"enabled": True}, {"_id": 0}).to_list(10000)
+        self.alarm_defs = await self.db.alarm_defs.find({}, {"_id": 0}).to_list(50000)
+        self.text_lib = {p["id"]: {x["id"]: x.get("text", "") for x in p.get("text_library") or []}
+                         async for p in self.db.projects.find({}, {"_id": 0, "id": 1, "text_library": 1})}
+        if not self.def_loaded:
+            async for a in self.db.alarms.find({"active": True, "def_id": {"$exists": True}}, {"_id": 0, "id": 1, "def_id": 1}):
+                self.def_active[a["def_id"]] = a["id"]
+            self.def_loaded = True
         self.devices = {d["id"]: d for d in await self.db.devices.find({}, {"_id": 0}).to_list(5000)}
         self.tags = await self.db.tags.find({}, {"_id": 0}).to_list(50000)
         self.proj_order = {p["id"]: (p.get("settings") or {}).get("byte_order") or "ABCD"
@@ -135,6 +199,8 @@ class Engine:
                 self.retry_at[dev_id] = t + 5
                 self.dev_status[dev_id] = {"status": "offline", "error": str(e)[:300] or "Timeout"}
         await self.check_alarms()
+        await self.check_alarm_defs()
+        await self.sample_records(t)
         if self.tick % 5 == 0:
             await self.log_history()
 

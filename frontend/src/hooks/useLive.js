@@ -65,3 +65,14 @@ export function usePolling(fn, deps, interval) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 }
+
+const recCache = {};
+export function useRecords(base, bump = 0) {
+  const [recs, setRecs] = useState([]);
+  useEffect(() => {
+    if (!base) return;
+    if (!recCache[base] || bump) recCache[base] = api.get(`${base}/records`).then((r) => r.data).catch(() => []);
+    recCache[base].then(setRecs);
+  }, [base, bump]);
+  return recs;
+}

@@ -15,6 +15,7 @@ from auth import hash_password, verify_password, set_auth_cookies, decode_token,
 from drivers import PROTOCOLS, validate_address, make_driver, infer_type
 from security import router as security_router, client_from_request
 from tag_import import parse_tag_file
+from records import router as records_router, build_pdf
 from engine import Engine
 from formats import TYPE_SPEC, spec_for
 from seed import create_demo_project
@@ -59,6 +60,7 @@ class ProjectUpdate(BaseModel):
     height: Optional[int] = None
     screens: Optional[List[dict]] = None
     settings: Optional[dict] = None
+    text_library: Optional[List[dict]] = None
     fonts: Optional[List[dict]] = None
 
 
@@ -246,6 +248,8 @@ async def delete_project(project_id: str, user=Depends(get_current_user)):
     await db.tags.delete_many({"project_id": project_id})
     await db.alarms.delete_many({"project_id": project_id})
     await db.tag_history.delete_many({"project_id": project_id})
+    for c in ("data_records", "alarm_defs", "record_samples", "client_groups", "client_users"):
+        await db[c].delete_many({"project_id": project_id})
     return {"ok": True}
 
 
@@ -417,8 +421,45 @@ def make_rt_router(resolver):
     async def values(ctx=Depends(resolver)):
         dev_ids = [d["id"] async for d in db.devices.find({"project_id": ctx["id"]}, {"_id": 0, "id": 1})]
         snap = engine.snapshot(ctx["id"], dev_ids)
-        snap["active_alarms"] = await db.alarms.count_documents({"project_id": ctx["id"], "active": True})
+        events = await db.alarms.find({"project_id": ctx["id"], "active": True}, {"_id": 0, "id": 1, "message": 1, "level": 1, "group": 1, "acked": 1,
+                                       "beep": 1, "beep_once": 1, "alarm_screen": 1, "popup_once": 1, "ts_in": 1}).to_list(200)
+        snap["active_alarms"] = len(events)
+        snap["alarm_events"] = events
         return snap
+
+    async def record_meta(pid: str, no: int):
+        rec = await db.data_records.find_one({"project_id": pid, "number": no}, {"_id": 0})
+        if not rec:
+            raise HTTPException(404, f"Data record #{no} tidak ditemukan")
+        return rec
+
+    def time_range(start: Optional[str], end: Optional[str], minutes: int):
+        e = datetime.fromisoformat(end.replace("Z", "+00:00")) if end else datetime.now(timezone.utc)
+        s = datetime.fromisoformat(start.replace("Z", "+00:00")) if start else e - timedelta(minutes=max(1, minutes))
+        return s, e
+
+    @r.get("/records")
+    async def records(ctx=Depends(resolver)):
+        tags = {t["id"]: t for t in await db.tags.find({"project_id": ctx["id"]}, {"_id": 0}).to_list(5000)}
+        recs = await db.data_records.find({"project_id": ctx["id"]}, {"_id": 0}).sort("number", 1).to_list(100)
+        return [{"number": x["number"], "name": x.get("name", ""), "interval_s": x.get("interval_s", 5),
+                 "channels": [{"tag_id": c, "name": tags[c]["name"], "unit": tags[c].get("unit", ""), "decimals": tags[c].get("decimals", 0)} for c in x["channels"] if c in tags]} for x in recs]
+
+    @r.get("/records/{no}/samples")
+    async def samples(no: int, start: Optional[str] = None, end: Optional[str] = None, minutes: int = 60, limit: int = 3000, ctx=Depends(resolver)):
+        s, e = time_range(start, end, minutes)
+        rows = await db.record_samples.find({"project_id": ctx["id"], "record": no, "ts": {"$gte": s, "$lte": e}}, {"_id": 0, "ts": 1, "v": 1}).sort("ts", -1).to_list(min(limit, 20000))
+        return [{"ts": x["ts"].replace(tzinfo=timezone.utc).isoformat(), "v": x["v"]} for x in reversed(rows)]
+
+    @r.get("/records/{no}/pdf")
+    async def pdf(no: int, start: Optional[str] = None, end: Optional[str] = None, minutes: int = 60, ctx=Depends(resolver)):
+        rec = await record_meta(ctx["id"], no)
+        s, e = time_range(start, end, minutes)
+        rows = await db.record_samples.find({"project_id": ctx["id"], "record": no, "ts": {"$gte": s, "$lte": e}}, {"_id": 0}).sort("ts", 1).to_list(20000)
+        tags = {t["id"]: t for t in await db.tags.find({"project_id": ctx["id"]}, {"_id": 0}).to_list(5000)}
+        p = await db.projects.find_one({"id": ctx["id"]}, {"_id": 0, "name": 1})
+        data = await asyncio.to_thread(build_pdf, p["name"], rec, tags, rows, s, e)
+        return Response(data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=record-{no}.pdf"})
 
     @r.post("/write")
     async def write(body: WriteIn, ctx=Depends(resolver)):
@@ -577,6 +618,7 @@ async def root():
 
 app.include_router(api)
 app.include_router(security_router, prefix="/api")
+app.include_router(records_router, prefix="/api")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.environ["FRONTEND_URL"], "http://localhost:3000"],
@@ -603,6 +645,8 @@ async def startup():
     await db.login_attempts.create_index("identifier")
     await db.tag_history.create_index([("project_id", 1), ("ts", -1)])
     await db.tag_history.create_index("ts", expireAfterSeconds=7 * 86400, name="ts_ttl")
+    await db.record_samples.create_index([("project_id", 1), ("record", 1), ("ts", -1)])
+    await db.record_samples.create_index("ts", expireAfterSeconds=90 * 86400, name="rs_ttl")
     await db.alarms.create_index([("project_id", 1), ("ts_in", -1)])
     await db.projects.create_index("publish_slug")
     await seed_admin()

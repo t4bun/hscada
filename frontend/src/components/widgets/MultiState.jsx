@@ -147,7 +147,7 @@ export const FuncButton = ({ p }) => {
   const [pressed, setPressed] = useState(false);
   const click = () => {
     if (!can) return;
-    ({ open_screen: () => rt.openScreen?.(p.screen_id), open_subscreen: () => rt.openSub?.(p.screen_id), previous: () => rt.prevScreen?.(), next: () => rt.nextScreen?.(), close_subscreen: () => rt.closeSub?.() })[p.action]?.();
+    ({ open_screen: () => rt.openScreen?.(p.screen_id), open_subscreen: () => rt.openSub?.(p.screen_id), previous: () => rt.prevScreen?.(), next: () => rt.nextScreen?.(), close_subscreen: () => rt.closeSub?.(), export_pdf: () => rt.exportPdf?.(Number(p.record_no) || 1) })[p.action]?.();
   };
   return (
     <button type="button" data-testid="hmi-func-button" className="w-full h-full block" onClick={click} onPointerDown={() => setPressed(true)} onPointerUp={() => setPressed(false)} onPointerLeave={() => setPressed(false)}>

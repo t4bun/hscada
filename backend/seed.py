@@ -87,6 +87,20 @@ async def create_demo_project(db, owner_id: str):
           states=[{"value": 0, "text": "START 1.5s", "bg": "#1E3A8A", "color": "#fff", "blink": False}, {"value": 1, "text": "RUNNING", "bg": "#16A34A", "color": "#fff", "blink": False}]),
         w("func_button", 290, 200, 110, 40, text="TUTUP", action="close_subscreen", shape="rounded", bg="#DC2626", color="#fff", font_family="Chivo", font_size=13),
     ]
+    rec_ch = [i("level"), i("flow"), i("press"), i("temp")]
+    await db.data_records.insert_one({"id": _id(), "project_id": pid, "number": 1, "name": "Proses Utama", "interval_s": 5, "channels": rec_ch, "enabled": True})
+    await db.alarm_defs.insert_many([
+        {"id": _id(), "project_id": pid, "kind": "bit", "tag_id": i("valve"), "group": 1, "condition": "off", "value": None, "low": None, "high": None,
+         "data_format": "BOOL", "content": "Valve XV-01 tertutup", "library_id": "", "record": True, "not_save_off": False, "beep": False,
+         "beep_once": False, "alarm_screen": "", "popup_once": True},
+        {"id": _id(), "project_id": pid, "kind": "word", "tag_id": i("press"), "group": 2, "condition": "high", "value": 8.5, "low": None, "high": None,
+         "data_format": "INT16", "content": "Tekanan melebihi 8.5 bar", "library_id": "", "record": True, "not_save_off": False, "beep": True,
+         "beep_once": True, "alarm_screen": "", "popup_once": True},
+    ])
+    for x in report:
+        if x["type"] in ("history", "data_record"):
+            x["props"]["record_no"] = 1
+    report.append(w("func_button", 900, 16, 180, 40, text="EXPORT PDF", action="export_pdf", record_no=1, shape="rounded", bg="#059669", color="#fff", font_family="Chivo", font_size=14))
     await db.projects.insert_one({
         "id": pid, "owner_id": owner_id, "name": "Demo Pengolahan Air", "description": "Contoh proyek dengan simulator S7-1200",
         "width": 1280, "height": 720, "fonts": [],

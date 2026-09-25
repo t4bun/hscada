@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Upload, Trash2, ArrowUpToLine, ArrowDownToLine, Copy, Plus, AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal, AlignHorizontalSpaceAround, AlignVerticalSpaceAround, Group, Ungroup } from "lucide-react";
 import { WIDGETS } from "@/components/widgets/registry";
-import { BUILTIN_FONTS, DATA_TYPES, TYPE_SPEC, specFor, defaultDecimals } from "@/lib/format";
+import { BUILTIN_FONTS, DATA_TYPES, TYPE_SPEC, specFor, defaultDecimals, SERIES_COLORS } from "@/lib/format";
 import { uploadFile, errMsg, assetUrl } from "@/lib/api";
 
 const inputCls = "w-full h-8 bg-[#0B0F17] border border-slate-700 rounded-sm px-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500";
@@ -68,6 +68,28 @@ const StatesEditor = ({ value, set, bit }) => {
   );
 };
 
+const LinesEditor = ({ value, set, rec }) => {
+  if (!rec) return <p className="text-[11px] text-slate-500">Pilih nomor data record dulu</p>;
+  const rows = rec.channels.map((c, i) => ({ tag_id: c.tag_id, enabled: true, type: "line", width: 2, color: SERIES_COLORS[i % SERIES_COLORS.length], ...value.find((l) => l.tag_id === c.tag_id), name: c.name }));
+  const upd = (i, patch) => set(rows.map((r, j) => { const { name, ...rest } = j === i ? { ...r, ...patch } : r; return rest; }));
+  return (
+    <div className="space-y-1 max-h-60 overflow-y-auto hmi-scroll" data-testid="lines-editor">
+      {rows.map((r, i) => (
+        <div key={r.tag_id} className="flex items-center gap-1 bg-[#0B0F17] border border-slate-800 p-1 rounded-sm">
+          <input type="checkbox" data-testid={`line-enable-${i}`} className="accent-blue-500" checked={r.enabled} onChange={(e) => upd(i, { enabled: e.target.checked })} />
+          <span className="text-[10px] font-mono text-slate-500 w-5">{i + 1}</span>
+          <span className="flex-1 min-w-0 truncate text-[11px] text-slate-200">{r.name}</span>
+          <select data-testid={`line-type-${i}`} className="h-6 bg-slate-800 text-[10px] rounded-sm" value={r.type} onChange={(e) => upd(i, { type: e.target.value })}>
+            {[["line", "Line"], ["dashed", "Dash"], ["step", "Step"], ["area", "Area"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <input type="number" min={1} max={8} title="Line width" className="h-6 w-9 bg-slate-800 text-[10px] rounded-sm px-1" value={r.width} onChange={(e) => upd(i, { width: Number(e.target.value) })} />
+          <input type="color" className="h-6 w-6 bg-transparent" value={r.color} onChange={(e) => upd(i, { color: e.target.value })} />
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const Field = ({ f, value, set, ctx, widget }) => {
   const id = `prop-${f.key}`;
   switch (f.type) {
@@ -102,6 +124,14 @@ const Field = ({ f, value, set, ctx, widget }) => {
         </select>
       );
     }
+    case "heading": return null;
+    case "record": return (
+      <select data-testid={id} className={inputCls} value={value || ""} onChange={(e) => set(Number(e.target.value))}>
+        <option value="">— pilih data record —</option>
+        {(ctx.records || []).map((r) => <option key={r.number} value={r.number}>{`#${r.number} ${r.name} (${r.channels.length} ch)`}</option>)}
+      </select>
+    );
+    case "lines": return <LinesEditor value={value || []} set={set} rec={(ctx.records || []).find((r) => r.number === Number(widget.props.record_no))} />;
     case "states": return <StatesEditor value={value || []} set={set} bit={f.bit || (f.bitKey && widget.props[f.bitKey] !== "word")} />;
     case "charinfo": {
       const t = ctx.tags.find((x) => x.id === widget.props.tag);
@@ -183,7 +213,7 @@ const WidgetProps = ({ widget, ctx, onProps, onGeom, onAction }) => {
       </Section>
       <Section title="Properti">
         {def.fields.map((f) => (
-          <Row key={f.key} label={f.label}><Field f={f} value={p[f.key]} set={set(f.key)} ctx={ctx} widget={{ ...widget, props: p }} /></Row>
+          f.type === "heading" ? <p key={f.key} className="text-[10px] font-bold tracking-[0.2em] text-blue-400 pt-2">{f.label}</p> : <Row key={f.key} label={f.label}><Field f={f} value={p[f.key]} set={set(f.key)} ctx={ctx} widget={{ ...widget, props: p }} /></Row>
         ))}
       </Section>
     </>

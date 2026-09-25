@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { api, errMsg } from "@/lib/api";
-import { RtContext, useLive, useFonts } from "@/hooks/useLive";
+import { RtContext, useLive, useFonts, useRecords } from "@/hooks/useLive";
 import { newWidget } from "@/components/widgets/registry";
 import { Canvas } from "@/components/editor/Canvas";
 import { Palette } from "@/components/editor/Palette";
@@ -33,6 +33,7 @@ export default function Editor() {
 
   const base = `/projects/${id}/rt`;
   const live = useLive(base, !!project);
+  const records = useRecords(base, project ? 1 : 0);
   useFonts(project?.fonts);
 
   useEffect(() => {
@@ -175,7 +176,7 @@ export default function Editor() {
   }, [dirty]);
 
   const tagMap = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags]);
-  const rt = useMemo(() => ({ values: live.snap.values, ts: live.snap.ts, tagMap, mode: "edit", allowOperate: false, write: live.write, base, gotoScreen: () => {} }), [live.snap, tagMap, live.write, base]);
+  const rt = useMemo(() => ({ values: live.snap.values, ts: live.snap.ts, tagMap, mode: "edit", allowOperate: false, write: live.write, base, records, gotoScreen: () => {} }), [live.snap, tagMap, live.write, base, records]);
 
   if (!project) return <div className="h-screen grid place-items-center bg-[#0B0F17] text-slate-500 font-mono text-sm">Memuat editor...</div>;
 
@@ -207,7 +208,7 @@ export default function Editor() {
           <Inspector
             widget={widget} screen={screen} project={project}
             multi={sel.length > 1 ? { count: sel.length, grouped: selWidgets.some((w) => w.group), onAlign: align } : null}
-            ctx={{ tags, screens: project.screens, fonts: project.fonts || [] }}
+            ctx={{ tags, records, screens: project.screens, fonts: project.fonts || [] }}
             onProps={(patch) => updateWidget(widget.id, { props: { ...widget.props, ...patch } })}
             onGeom={(patch) => updateWidget(widget.id, patch)}
             onAction={action}
