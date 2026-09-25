@@ -1,0 +1,125 @@
+{
+  "theme": "Dark Industrial SCADA/HMI Control Room (Gelap ala Software Industri)",
+  "language": "Indonesian (Bahasa Indonesia)",
+  "typography": {
+    "heading_font": "Chivo, 'IBM Plex Sans', sans-serif",
+    "body_font": "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+    "mono_font": "'JetBrains Mono', 'Source Code Pro', monospace",
+    "scale": {
+      "h1_page_title": "text-2xl font-bold tracking-tight text-slate-100",
+      "h2_section": "text-lg font-semibold tracking-tight text-slate-200",
+      "h3_card_header": "text-sm font-semibold tracking-normal text-slate-300",
+      "body": "text-sm font-normal text-slate-300 leading-snug",
+      "label": "text-xs font-medium uppercase tracking-wider text-slate-400",
+      "mono_value": "font-mono text-sm tracking-wide text-emerald-400 font-semibold",
+      "alarm_alert": "font-mono text-xs font-bold uppercase tracking-wider"
+    }
+  },
+  "colors": {
+    "archetype": "THE PERFORMANCE PRO / INDUSTRIAL DARK TACTICAL",
+    "background_main": "#0B0F17",
+    "background_card": "#111827",
+    "background_panel": "#1E293B",
+    "background_canvas": "#090D14",
+    "border_subtle": "#1E293B",
+    "border_active": "#3B82F6",
+    "text_primary": "#F8FAFC",
+    "text_secondary": "#94A3B8",
+    "text_muted": "#64748B",
+    "accent_primary": "#2563EB",
+    "accent_primary_hover": "#1D4ED8",
+    "accent_success_plc_connected": "#10B981",
+    "accent_warning": "#F59E0B",
+    "accent_danger_alarm": "#EF4444",
+    "accent_info_cyan": "#06B6D4",
+    "hmi_widget_colors": {
+      "tank_water": "#3B82F6",
+      "tank_oil": "#F59E0B",
+      "pipe_active": "#10B981",
+      "pipe_inactive": "#475569",
+      "lamp_on": "#22C55E",
+      "lamp_off": "#334155",
+      "lamp_fault": "#EF4444"
+    }
+  },
+  "visual_enhancers": {
+    "tactical_borders": "1px solid #1E293B with 2px sharp hover focus in #3B82F6",
+    "glassmorphism_nav": "bg-slate-900/80 backdrop-blur-md border-b border-slate-800",
+    "canvas_grid": "repeating grid pattern 20px x 20px dot grid (#1E293B on #090D14)",
+    "alarm_glow": "shadow-[0_0_12px_rgba(239,68,68,0.4)]",
+    "active_widget_glow": "shadow-[0_0_10px_rgba(59,130,246,0.5)] border-blue-500"
+  },
+  "component_path": "/app/frontend/src/components/ui",
+  "grids": {
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4",
+    "editor_layout": "flex h-screen w-screen overflow-hidden bg-[#0B0F17]",
+    "left_palette_sidebar": "w-72 border-r border-slate-800 bg-[#111827] flex flex-col shrink-0",
+    "center_canvas_area": "flex-1 relative overflow-auto bg-[#090D14] p-4 flex items-center justify-center",
+    "right_inspector_sidebar": "w-80 border-l border-slate-800 bg-[#111827] flex flex-col shrink-0 overflow-y-auto p-4"
+  },
+  "layouts": {
+    "auth_page": "min-h-screen bg-[#0B0F17] flex items-center justify-center p-4",
+    "projects_dashboard": "min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col",
+    "runtime_viewer": "w-screen h-screen bg-[#090D14] overflow-hidden relative"
+  },
+  "motion": {
+    "hover_button": "transition-colors duration-150 ease-in-out",
+    "widget_drag": "transition-shadow duration-150 shadow-2xl",
+    "live_indicator": "animate-pulse"
+  },
+  "accessibility": {
+    "contrast_ratio": "APCA 4.5:1+ high contrast dark theme",
+    "data_testid_requirement": "All interactive elements, buttons, inputs, canvas widgets, plc items, tag rows, and alarm toggles MUST include explicit data-testid attributes.",
+    "focus_states": "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+  },
+  "media": {
+    "supported_image_types": "PNG, JPG, SVG, WebP",
+    "max_upload_size_mb": 5
+  },
+  "3d_libraries": {
+    "canvas_engine": "HTML5 Canvas / SVG rendering for widgets, Lucide React icons for controls, Recharts for trend charts and history trends."
+  },
+  "image_urls": {
+    "control_room_hero": "https://images.pexels.com/photos/37769419/pexels-photo-37769419.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "factory_panel": "https://images.pexels.com/photos/32529354/pexels-photo-32529354.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+  },
+  "instructions_to_main_agent": {
+    "app_overview": "Aplikasi Builder SCADA / HMI web berbasis React dengan Bahasa Indonesia, tema Gelap ala Software Industri. Mendukung manajemen koneksi PLC (S7-1200/1500, S7-200, Wecon, Omron FINS, Haiwell, Weintek, Modbus TCP), Tag Manager dengan kalkulasi otomatis panjang karakter & decimal berdasarkan tipe data (INT16, UINT16, INT32, UINT32, FLOAT32, BOOL), Drag & Drop HMI Builder dengan komponen intuitif, serta Publish Web App Runtime URL publik untuk client.",
+    "key_features_to_implement": [
+      "1. Autentikasi JWT (Login & Register Bahasa Indonesia).",
+      "2. Dashboard Proyek SCADA (Buat proyek baru, daftar proyek, hapus, buka editor, publish URL).",
+      "3. Connection & Driver Manager (Pilih protokol Siemens S7-1200/1500, S7-200, Wecon, Omron FINS, Haiwell, Weintek, Modbus TCP, IP, Port, Rack/Slot, Toggle Simulator vs Real Driver).",
+      "4. Tag Manager: Tambah/edit tag PLC. Pilihan tipe data (INT16, UINT16, INT32, UINT32, FLOAT32, BOOL). Kalkulasi otomatis Maksimum Panjang Karakter (contoh: INT16 -> max 6 char '-32768', UINT16 -> max 5 char '65535', FLOAT32 -> max 12 char) & opsi mengatur Decimal Point otomatis/manual. Alarm limits (HH, High, Low, LL).",
+      "5. Visual HMI Builder Editor: Canvas drag & drop + resize + snap to grid. Multi-screen tabs (Screen 1 Main, Screen 2 Tank, Screen 3 Alarm). Top bar with Undo, Redo, Grid Toggle, Save, Preview, Publish. Widget palette di kiri & Property Inspector di kanan.",
+      "6. Intuitive SCADA Widgets: Button/Switch (Momentary, Toggle, Set Value), Status Lamp/LED, Numeric Display, Numeric Input/Setpoint, Slider, Radial/Linear Gauge, Liquid Tank / Level Bar, Real-time Trend Chart (Recharts), History Trend, Alarm Record Table (ISA-18.2 severity colors), Data Record Table, Label/Text (Custom font/color/size), Shapes (Rectangle, Circle, Line, Pipe), Import Photo/SVG asset.",
+      "7. Public Runtime Viewer: Halaman publik via URL unik (/runtime/:projectId atau /view/:publishId), mode full-screen, live values via WebSocket/polling simulator, kontrol interaktif (operate) untuk sakelar/setpoint."
+    ],
+    "tag_data_type_formatting_logic": {
+      "BOOL": {"max_chars": 5, "default_decimals": 0, "sample": "TRUE/FALSE"},
+      "INT16": {"max_chars": 6, "default_decimals": 0, "min": -32768, "max": 32767},
+      "UINT16": {"max_chars": 5, "default_decimals": 0, "min": 0, "max": 65535},
+      "INT32": {"max_chars": 11, "default_decimals": 0, "min": -2147483648, "max": 2147483647},
+      "UINT32": {"max_chars": 10, "default_decimals": 0, "min": 0, "max": 4294967295},
+      "FLOAT32": {"max_chars": 12, "default_decimals": 2, "sample": "1234.56"}
+    }
+  },
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms.",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file. This disrupts the human natural reading flow of text.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯 etc for icons. Use Lucide React icons (@lucide-react or lucide-react).",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories (especially sponsor logos) = main agent will use placeholder text which is FORBIDDEN.",
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Examine existing components to understand the project's component patterns before creating new ones.",
+    "Use sonner for toasts. Sonner component is located in /app/frontend/src/components/ui/sonner.jsx.",
+    "All interactive and key informational elements MUST include a data-testid attribute to facilitate robust automated testing."
+  ]
+}
