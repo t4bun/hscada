@@ -1,0 +1,22 @@
+{
+  "summary": "Iteration 6 — validated new features: hide-engineer/boot + system settings, project export/import (.nhmi), tags/ensure (direct address), and rt records/{no}/log format switch (pdf/xlsx/csv). Backend pytest: 24/24 PASS. Frontend: verified all data-testids for ServerSettingsDialog (base + conditional engineer-path/random after hide switch), ImportProjectDialog, per-card export button; verified hide-mode save flow via UI (server-save-result appears, SPA auto-redirects to /<path>/projects) and boot API mirrors it (seg=eng-uitest1 -> engineer=true, seg=projects -> engineer=false); state restored to defaults at end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/iteration6_test.py", "/app/test_reports/pytest/iteration6_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/system.py: PATH_RE allows 4-40 chars but RESERVED set includes only lowercase words; already lower-cased inbound. Consider also blocking common runtime slugs (e.g. 'public', 'files', 'uploads', 'assets') to avoid future route conflicts.",
+    "backend/transfer.py import_project: JSON round-trip via regex-based UUID_RE.sub remaps ALL UUID-like tokens including any that happen to appear in text fields (comments, labels). Very low risk but worth documenting; a targeted per-field remap would be more precise.",
+    "backend/transfer.py import_project: file size limit (300MB) is enforced only after fully reading UploadFile into memory; large payloads could pressure RAM. Consider streaming or Content-Length pre-check.",
+    "backend/server.py rt/records/{no}/log: format is validated to {pdf,xlsx,csv} but tz is not bounded; extremely large tz would still work but is inconsequential. Non-blocking.",
+    "backend/system.py write_settings coerces mdns_name via removesuffix('.local') and lowercases custom_domain before validation — good. But GET /api/system/settings returns lan_ips even in cloud mode; not a bug, useful, just note in FE that in cloud these are container-internal IPs."
+  ],
+  "updated_files": ["/app/backend/tests/iteration6_test.py (new)"],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "100% (all spec'd data-testids present; hide-mode save+redirect confirmed)"},
+  "test_credentials": "amoskun99@gmail.com / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Import test creates a temporary published copy of Demo project and deletes it in the same test class. Ensure-tag test creates an auto BOOL tag and deletes it via DELETE /api/projects/{pid}/tags/{id}. System settings toggled during UI save-flow test and restored to defaults via API (hide_engineer=false, all blanks, http_port=8080). Confirmed via /api/boot after test: {hide:false, engineer:true, default_slug:''}.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=<public> python -m pytest backend/tests/iteration6_test.py -v -o addopts= --junitxml=/app/test_reports/pytest/iteration6_results.xml. Demo project 'Demo Pengolahan Air' must be published (used as default_slug candidate + as source for export/import). The engineer-path input in ServerSettingsDialog is rendered only when the hide switch is ON — assert conditionally. CSV log has a UTF-8 BOM ('\\ufeff') before 'Waktu,'; strip it before header check. Chart PDF endpoint /rt/records/{no}/pdf still works and now returns chart-only (no table).",
+  "rca of the issue": "No bugs found."
+}
