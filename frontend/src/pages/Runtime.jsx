@@ -1,3 +1,5 @@
+import { useBrand } from "@/components/Brand";
+import { KioskPinDialog, KioskHotspot } from "@/components/runtime/KioskPin";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -84,6 +86,8 @@ export default function Runtime({ mode, slugOverride }) {
   const [pdf, setPdf] = useState(null);
   const [kiosk, setKiosk] = useState(() => new URLSearchParams(window.location.search).get("kiosk") === "1" || window.matchMedia?.("(display-mode: fullscreen), (display-mode: standalone)").matches);
   const [installEvt, setInstallEvt] = useState(null);
+  const [pinOpen, setPinOpen] = useState(false);
+  const { brand } = useBrand();
   const seen = useRef(new Set());
   const base = mode === "public" ? `/public/${slug}/rt` : `/projects/${id}/rt`;
 
@@ -183,6 +187,13 @@ export default function Runtime({ mode, slugOverride }) {
     window.history.replaceState(null, "", u.toString());
     setKiosk(true);
   };
+  const exitKiosk = () => {
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    const u = new URL(window.location.href);
+    u.searchParams.delete("kiosk");
+    window.history.replaceState(null, "", u.toString());
+    setKiosk(false);
+  };
 
   const loginOk = (token) => { localStorage.setItem(tokenKey, token); load(); };
   const logout = () => { localStorage.removeItem(tokenKey); setClientToken(null); load(); };
@@ -206,6 +217,9 @@ export default function Runtime({ mode, slugOverride }) {
             {sub && <Subscreen screen={sub} onClose={() => setSubId(null)} />}
           </div>
         </div>
+        {kiosk && brand.kiosk_pin_set ? (
+          <KioskHotspot onTrigger={() => setPinOpen(true)} />
+        ) : (
         <div className={`fixed top-2 right-2 flex items-center gap-1 bg-slate-900/70 backdrop-blur-md border border-slate-700/60 rounded-sm px-1.5 py-1 ${kiosk ? "opacity-0" : "opacity-50"} hover:opacity-100 transition-opacity z-30`} data-testid="runtime-toolbar">
           {mode === "preview" && <span className="text-[10px] font-mono text-amber-400 px-1">PREVIEW</span>}
           {!rt.allowOperate && <span className="text-[10px] font-mono text-slate-400 px-1" data-testid="runtime-readonly-badge">READ-ONLY</span>}
@@ -219,10 +233,13 @@ export default function Runtime({ mode, slugOverride }) {
             <button data-testid="runtime-install-btn" title="Install sebagai aplikasi" onClick={() => { installEvt.prompt(); setInstallEvt(null); }} className="text-emerald-300 hover:text-white px-1"><Download size={14} /></button>
           )}
           {!kiosk && <button data-testid="runtime-kiosk-btn" title="Mode Kiosk (full-screen)" onClick={enterKiosk} className="text-slate-300 hover:text-white px-1"><MonitorPlay size={14} /></button>}
+          {kiosk && <button data-testid="runtime-exit-kiosk-btn" title="Keluar Mode Kiosk" onClick={exitKiosk} className="text-amber-300 hover:text-white px-1"><X size={14} /></button>}
           <button data-testid="runtime-fullscreen-btn" onClick={() => (fs ? document.exitFullscreen() : document.documentElement.requestFullscreen())} className="text-slate-300 hover:text-white px-1">
             {fs ? <Minimize size={14} /> : <Maximize size={14} />}
           </button>
         </div>
+        )}
+        <KioskPinDialog open={pinOpen} onOpenChange={setPinOpen} onUnlocked={() => { setPinOpen(false); exitKiosk(); }} />
         {idle && <ScreenSaver name={app.name} />}
         <PdfDialog req={pdf} base={base} onClose={() => setPdf(null)} />
       </div>

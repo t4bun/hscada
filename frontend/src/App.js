@@ -39,7 +39,7 @@ function App() {
   useEffect(() => {
     api.get("/boot", { params: { seg: seg() } }).then((r) => {
       setBoot(r.data);
-      setBrand({ workspace_name: r.data.workspace_name || DEFAULT_BRAND.workspace_name, workspace_logo: r.data.workspace_logo || "" });
+      setBrand({ workspace_name: r.data.workspace_name || DEFAULT_BRAND.workspace_name, workspace_logo: r.data.workspace_logo || "", kiosk_pin_set: !!r.data.kiosk_pin_set });
     }).catch(() => setBoot({ hide: false, engineer: true }));
   }, []);
   useEffect(() => { document.title = brand.workspace_name; }, [brand]);

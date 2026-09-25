@@ -55,7 +55,8 @@ export const ServerSettingsDialog = ({ open, onOpenChange, projects }) => {
     try {
       const { data } = await api.put("/system/settings", { ...s, http_port: Number(s.http_port) });
       setRes(data);
-      setBrand({ workspace_name: data.workspace_name, workspace_logo: data.workspace_logo });
+      setBrand({ workspace_name: data.workspace_name, workspace_logo: data.workspace_logo, kiosk_pin_set: data.kiosk_pin_set });
+      setS((x) => ({ ...x, kiosk_pin: "", kiosk_pin_clear: false, kiosk_pin_set: data.kiosk_pin_set }));
       toast.success("Pengaturan disimpan");
       const want = data.hide_engineer ? data.engineer_path : "";
       const cur = seg() === "projects" ? "" : seg();
@@ -83,6 +84,23 @@ export const ServerSettingsDialog = ({ open, onOpenChange, projects }) => {
         </DialogHeader>
         {!local && <p data-testid="server-cloud-note" className="text-[11px] text-amber-200/90 bg-amber-500/5 border border-amber-500/30 p-2 rounded-sm">Mode cloud: nama .local, domain, dan port hanya berlaku di versi lokal (PC pabrik). Path engineer dan project default tetap berlaku.</p>}
         <WorkspaceSection s={s} setS={setS} />
+        <section className="grid grid-cols-1 md:grid-cols-[1fr_200px] gap-3 items-end border border-slate-800 rounded-sm p-4" data-testid="kiosk-pin-section">
+          <div>
+            <p className="text-sm flex items-center gap-2">PIN Keluar Mode Kiosk
+              <span data-testid="kiosk-pin-status" className={`text-[10px] font-mono px-1.5 py-0.5 rounded-sm border ${s.kiosk_pin_set ? "text-emerald-300 border-emerald-700/60" : "text-slate-500 border-slate-700"}`}>{s.kiosk_pin_set ? "AKTIF" : "BELUM DIATUR"}</span>
+            </p>
+            <p className="text-xs text-slate-500">Jika diatur, toolbar runtime disembunyikan di mode kiosk. Keluar dengan menahan pojok kanan atas 3 detik lalu masukkan PIN.</p>
+            {s.kiosk_pin_set && (
+              <label className="mt-2 flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                <input type="checkbox" data-testid="kiosk-pin-clear" className="accent-red-500" checked={!!s.kiosk_pin_clear} onChange={(e) => setS({ ...s, kiosk_pin_clear: e.target.checked, kiosk_pin: "" })} />Hapus PIN
+              </label>
+            )}
+          </div>
+          <Lbl t={s.kiosk_pin_set ? "PIN Baru (4–8 digit)" : "PIN (4–8 digit)"}>
+            <input data-testid="kiosk-pin-new-input" type="password" inputMode="numeric" autoComplete="new-password" disabled={!!s.kiosk_pin_clear} className={inputCls}
+              placeholder={s.kiosk_pin_set ? "kosong = tidak diubah" : "mis. 1234"} value={s.kiosk_pin || ""} onChange={(e) => setS({ ...s, kiosk_pin: e.target.value.replace(/\D/g, "").slice(0, 8) })} />
+          </Lbl>
+        </section>
         <section className="space-y-3 border border-slate-800 rounded-sm p-4">
           <div className="flex items-center justify-between gap-4">
             <div><p className="text-sm">Sembunyikan Halaman Engineer</p><p className="text-xs text-slate-500">Operator yang membuka alamat utama langsung melihat runtime. Project manager hanya lewat path rahasia.</p></div>

@@ -4,9 +4,11 @@ import os
 import re
 import socket
 import subprocess
+import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+import bcrypt
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from auth import get_current_user
@@ -16,7 +18,9 @@ router = APIRouter()
 MODE = os.environ.get("APP_MODE", "cloud")
 RUN_PORT = int(os.environ.get("HTTP_PORT", "8080"))
 DEFAULTS = {"hide_engineer": False, "engineer_path": "", "default_slug": "", "mdns_name": "", "custom_domain": "", "http_port": RUN_PORT,
-            "workspace_name": "Scada by T4bun", "workspace_logo": ""}
+            "workspace_name": "Scada by T4bun", "workspace_logo": "", "kiosk_pin_hash": ""}
+PIN_RE = re.compile(r"^\d{4,8}$")
+_pin_fails = {}
 PATH_RE = re.compile(r"^[a-z0-9][a-z0-9-]{3,39}$")
 MDNS_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
 DOMAIN_RE = re.compile(r"^(?=.{3,253}$)[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
@@ -34,6 +38,8 @@ class SysIn(BaseModel):
     http_port: int = Field(8080, ge=1, le=65535)
     workspace_name: str = Field("Scada by T4bun", min_length=1, max_length=60)
     workspace_logo: str = ""
+    kiosk_pin: str = Field("", max_length=16)
+    kiosk_pin_clear: bool = False
 
 
 async def get_sys() -> dict:
@@ -130,18 +136,53 @@ async def boot(seg: str = ""):
     if slug and not await db.projects.find_one({"publish_slug": slug, "published": True}, {"_id": 1}):
         slug = ""
     return {"hide": hide, "engineer": (not hide) or seg == s["engineer_path"], "default_slug": slug,
-            "workspace_name": s["workspace_name"], "workspace_logo": s["workspace_logo"]}
+            "workspace_name": s["workspace_name"], "workspace_logo": s["workspace_logo"], "kiosk_pin_set": bool(s["kiosk_pin_hash"])}
+
+
+def public_sys(s: dict) -> dict:
+    return {k: v for k, v in s.items() if k != "kiosk_pin_hash"} | {"kiosk_pin_set": bool(s.get("kiosk_pin_hash"))}
+
+
+class PinIn(BaseModel):
+    pin: str = Field(max_length=16)
+
+
+@router.post("/kiosk/verify")
+async def kiosk_verify(body: PinIn, request: Request):
+    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "")
+    now = time.time()
+    f = _pin_fails.get(ip, {"n": 0, "until": 0})
+    if f["until"] > now:
+        raise HTTPException(429, f"Terlalu banyak percobaan. Coba lagi dalam {int(f['until'] - now) + 1} detik")
+    s = await get_sys()
+    if not s["kiosk_pin_hash"]:
+        return {"ok": True}
+    if bcrypt.checkpw(body.pin.encode(), s["kiosk_pin_hash"].encode()):
+        _pin_fails.pop(ip, None)
+        return {"ok": True}
+    f["n"] += 1
+    if f["n"] >= 5:
+        f = {"n": 0, "until": now + 60}
+    _pin_fails[ip] = f
+    raise HTTPException(403, "PIN salah")
 
 
 @router.get("/system/settings")
 async def read_settings(user=Depends(get_current_user)):
     s = await get_sys()
-    return s | {"mode": MODE, "running_port": RUN_PORT, "urls": local_urls(s) if MODE == "local" else [], "lan_ips": lan_ips()}
+    return public_sys(s) | {"mode": MODE, "running_port": RUN_PORT, "urls": local_urls(s) if MODE == "local" else [], "lan_ips": lan_ips()}
 
 
 @router.put("/system/settings")
 async def write_settings(body: SysIn, user=Depends(get_current_user)):
     s = body.model_dump()
+    pin, clear = s.pop("kiosk_pin").strip(), s.pop("kiosk_pin_clear")
+    if pin and not PIN_RE.match(pin):
+        raise HTTPException(400, "PIN kiosk harus 4–8 digit angka")
+    if clear:
+        s["kiosk_pin_hash"] = ""
+    elif pin:
+        s["kiosk_pin_hash"] = bcrypt.hashpw(pin.encode(), bcrypt.gensalt()).decode()
     s["engineer_path"] = s["engineer_path"].strip().strip("/").lower()
     s["mdns_name"] = s["mdns_name"].strip().lower().removesuffix(".local")
     s["custom_domain"] = s["custom_domain"].strip().lower()
@@ -157,8 +198,9 @@ async def write_settings(body: SysIn, user=Depends(get_current_user)):
     await db.system.update_one({"key": "main"}, {"$set": s}, upsert=True)
     notes = [n for n in (await asyncio.to_thread(apply_mdns, s["mdns_name"]), await asyncio.to_thread(apply_hosts, s["custom_domain"])) if n]
     await asyncio.to_thread(save_local_config, s)
-    return s | {"mode": MODE, "running_port": RUN_PORT, "restart_required": MODE == "local" and s["http_port"] != RUN_PORT,
-                "urls": local_urls(s) if MODE == "local" else [], "notes": notes}
+    s = await get_sys()
+    return public_sys(s) | {"mode": MODE, "running_port": RUN_PORT, "restart_required": MODE == "local" and s["http_port"] != RUN_PORT,
+                            "urls": local_urls(s) if MODE == "local" else [], "notes": notes}
 
 
 @router.post("/system/restart")
