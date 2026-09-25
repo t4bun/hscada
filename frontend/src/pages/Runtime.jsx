@@ -133,7 +133,7 @@ export default function Runtime({ mode }) {
 
   const tagMap = useMemo(() => Object.fromEntries((app?.tags || []).map((t) => [t.id, t])), [app]);
   const rt = useMemo(() => ({
-    values: live.snap.values, ts: live.snap.ts, tagMap, mode: "run",
+    values: live.snap.values, quality: live.snap.quality, ts: live.snap.ts, tagMap, mode: "run",
     allowOperate: !!app?.allow_operate && (!group || group.can_operate), canAck: !group || group.can_ack,
     level: group ? group.level : 99, write: live.write, base, records, exportPdf: setPdfNo, gotoScreen: nav.openScreen, ...nav,
   }), [live.snap, tagMap, app, group, live.write, base, nav, records]);

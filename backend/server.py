@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import secrets
+import socket
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Any
@@ -12,7 +13,8 @@ from starlette.middleware.cors import CORSMiddleware
 
 from db import db, client
 from auth import hash_password, verify_password, set_auth_cookies, decode_token, get_current_user, create_token
-from drivers import PROTOCOLS, validate_address, make_driver, infer_type
+from drivers import PROTOCOLS, validate_address, infer_type
+from plc_ext import list_serial_ports
 from security import router as security_router, client_from_request
 from tag_import import parse_tag_file
 from records import router as records_router, build_pdf
@@ -83,7 +85,18 @@ class DeviceIn(BaseModel):
     databits: int = 8
     parity: str = "N"
     stopbits: int = 1
+    serial_mode: str = "RS485"
     simulate: bool = True
+    reconnect_s: int = Field(5, ge=1, le=3600)
+    timeout_ms: int = Field(1000, ge=100, le=30000)
+    opc_namespace: int = 3
+    opc_endpoint: str = ""
+    opc_user: str = ""
+    opc_password: str = ""
+    fins_src_node: int = 0
+    fins_dst_node: int = 0
+    local_tsap: str = ""
+    remote_tsap: str = ""
 
 
 class TagIn(BaseModel):
@@ -310,7 +323,7 @@ async def update_device(device_id: str, body: DeviceIn, user=Depends(get_current
     upd = body.model_dump()
     upd["port"] = upd["port"] or PROTOCOLS[body.protocol]["port"]
     await db.devices.update_one({"id": device_id}, {"$set": upd})
-    engine.retry_at.pop(device_id, None)
+    engine.reset_driver(device_id)
     await engine.load_config()
     return await db.devices.find_one({"id": device_id}, {"_id": 0})
 
@@ -329,14 +342,43 @@ async def test_device(device_id: str, user=Depends(get_current_user)):
     d = await owned_device(device_id, user)
     if d.get("simulate", True) or d["protocol"] == "internal":
         return {"ok": True, "message": "Mode simulasi / memori internal — tidak perlu koneksi fisik"}
-    drv = make_driver(engine.with_order(d))
+    tag = await db.tags.find_one({"device_id": device_id}, {"_id": 0})
+    res = await engine.test(d, tag)
+    if res["ok"]:
+        engine._count(device_id, 0, 0, res["rtt_ms"])
+    return res
+
+
+@api.get("/system/serial-ports")
+async def serial_ports(user=Depends(get_current_user)):
     try:
-        await asyncio.wait_for(asyncio.to_thread(drv.connect), timeout=6)
-        return {"ok": True, "message": f"Terhubung ke {d['host']}:{d['port']}"}
+        return await asyncio.to_thread(list_serial_ports)
     except Exception as e:
-        return {"ok": False, "message": f"Gagal terhubung: {str(e) or 'timeout'}"}
-    finally:
-        drv.close()
+        raise HTTPException(500, f"Gagal membaca daftar port: {e}")
+
+
+def lan_addresses():
+    ips = set()
+    try:
+        ips.update(socket.gethostbyname_ex(socket.gethostname())[2])
+    except OSError:
+        pass
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ips.add(s.getsockname()[0])
+        s.close()
+    except OSError:
+        pass
+    return sorted(ip for ip in ips if not ip.startswith("127."))
+
+
+@api.get("/system/info")
+async def system_info(user=Depends(get_current_user)):
+    mode = os.environ.get("APP_MODE", "cloud")
+    port = os.environ.get("HTTP_PORT", "8080")
+    urls = [f"http://{ip}:{port}" for ip in lan_addresses()] if mode == "local" else []
+    return {"mode": mode, "hostname": socket.gethostname(), "port": port, "urls": urls, "local_url": f"http://localhost:{port}" if mode == "local" else None}
 
 
 # ---------------- Tags ----------------
@@ -534,7 +576,7 @@ async def public_app(slug: str, request: Request):
 
 # ---------------- Tag import / export ----------------
 @api.post("/projects/{project_id}/tags/import")
-async def import_tags(project_id: str, device_id: str = Form(...), file: UploadFile = File(...), user=Depends(get_current_user)):
+async def import_tags(project_id: str, device_id: str = Form(...), file: UploadFile = File(...), symbol_prefix: str = Form(""), user=Depends(get_current_user)):
     await owned_project(project_id, user)
     dev = await db.devices.find_one({"id": device_id, "project_id": project_id}, {"_id": 0})
     if not dev:
@@ -545,7 +587,14 @@ async def import_tags(project_id: str, device_id: str = Form(...), file: UploadF
         raise HTTPException(400, f"Gagal membaca file: {e}")
     existing = {t["name"] async for t in db.tags.find({"project_id": project_id}, {"_id": 0, "name": 1})}
     created, skipped = [], []
+    symbolic = PROTOCOLS[dev["protocol"]]["family"] == "opcua"
+    prefix = symbol_prefix.strip().strip(".")
     for r in rows:
+        if symbolic:
+            r["address"] = f'{prefix}."{r["raw_name"]}"' if prefix else f'"{r["raw_name"]}"'
+        elif not r["address"]:
+            skipped.append({"name": r["name"], "reason": "Alamat kosong"})
+            continue
         if r["name"] in existing:
             skipped.append({"name": r["name"], "reason": "Nama sudah ada"})
             continue
@@ -650,13 +699,30 @@ async def startup():
     await db.alarms.create_index([("project_id", 1), ("ts_in", -1)])
     await db.projects.create_index("publish_slug")
     await seed_admin()
-    try:
-        await asyncio.to_thread(init_storage)
-    except Exception as e:
-        logger.error(f"Storage init failed: {e}")
+    if not os.environ.get("LOCAL_STORAGE_DIR"):
+        try:
+            await asyncio.to_thread(init_storage)
+        except Exception as e:
+            logger.error(f"Storage init failed: {e}")
     asyncio.create_task(engine.run())
 
 
 @app.on_event("shutdown")
 async def shutdown():
     client.close()
+
+
+STATIC_DIR = os.environ.get("STATIC_DIR")
+if STATIC_DIR and os.path.isdir(STATIC_DIR):
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    STATIC_ROOT = os.path.realpath(STATIC_DIR)
+    app.mount("/static", StaticFiles(directory=os.path.join(STATIC_ROOT, "static")), name="static")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa(full_path: str):
+        f = os.path.realpath(os.path.join(STATIC_ROOT, full_path))
+        if full_path and f.startswith(STATIC_ROOT + os.sep) and os.path.isfile(f):
+            return FileResponse(f)
+        return FileResponse(os.path.join(STATIC_ROOT, "index.html"))

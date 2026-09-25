@@ -34,7 +34,7 @@ export const TagDialog = ({ open, onOpenChange, projectId, tag, preset, devices,
     const address = e.target.value;
     setF((s) => {
       const dt = inferType(family, address);
-      return touched.current || dt === s.data_type ? { ...s, address } : { ...s, address, ...typePatch(dt, s) };
+      return touched.current || !dt || dt === s.data_type ? { ...s, address } : { ...s, address, ...typePatch(dt, s) };
     });
   };
   const submit = async (e) => {

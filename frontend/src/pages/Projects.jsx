@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { api, errMsg } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { LocalAccess } from "@/components/LocalAccess";
 
 const inputCls = "w-full h-10 bg-[#0B0F17] border border-slate-700 rounded-sm px-3 text-sm text-slate-100 focus:outline-none focus:border-blue-500";
 
@@ -90,6 +91,7 @@ export default function Projects() {
         <button data-testid="logout-btn" onClick={signOut} className="h-8 px-3 text-xs flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-sm"><LogOut size={14} />Keluar</button>
       </header>
       <main className="max-w-6xl mx-auto px-6 lg:px-10 py-14 space-y-10">
+        <LocalAccess />
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="space-y-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-blue-400">Workspace Proyek</p>

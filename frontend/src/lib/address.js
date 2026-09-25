@@ -13,6 +13,24 @@ export const ADDRESS_MAP = {
     ["DM Word", "D<n>", "INT16", "D100"], ["DM DWord", "D<n> (2 word)", "INT32", "D200"], ["CIO Word", "CIO<n>", "INT16", "CIO10"],
   ],
   internal: [["Local Bit (LB)", "LB<n>", "BOOL", "LB0"], ["Local Word (LW)", "LW<n>", "INT16", "LW0"], ["Local DWord", "LW<n> (2 word)", "INT32", "LW100"]],
+  wecon: [
+    ["Data Register (D)", "D<n> → HR n", "INT16", "D100"], ["Bit dalam D", "D<n>.<bit>", "BOOL", "D10.3"], ["Relay Internal (M)", "M<n> → Coil n", "BOOL", "M10"],
+    ["Input (X, oktal)", "X<oct> → DI 0xF800", "BOOL", "X7"], ["Output (Y, oktal)", "Y<oct> → Coil 0xFC00", "BOOL", "Y10"], ["State (S)", "S<n> → Coil 0xE000", "BOOL", "S0"],
+    ["Nilai Timer / Counter", "TD<n> / CD<n>", "INT16", "TD5"], ["D 32-bit", "D<n> (2 reg)", "INT32", "D200"],
+  ],
+  hostlink: [
+    ["DM Word", "D<n>", "INT16", "D100"], ["DM Bit", "D<n>.<bit>", "BOOL", "D100.05"], ["CIO Word", "CIO<n>", "INT16", "CIO10"],
+    ["CIO Bit", "CIO<w>.<bit>", "BOOL", "CIO0.03"], ["Holding (H)", "H<n>", "INT16", "H5"], ["DM DWord", "D<n> (2 word)", "INT32", "D200"],
+  ],
+  fatek: [
+    ["Data Register (R)", "R<n>", "INT16", "R100"], ["Data Register (D)", "D<n>", "INT16", "D10"], ["Bit dalam R", "R<n>.<bit>", "BOOL", "R20.3"],
+    ["Relay (M)", "M<n>", "BOOL", "M0"], ["Input (X)", "X<n>", "BOOL", "X0"], ["Output (Y)", "Y<n>", "BOOL", "Y5"], ["R 32-bit", "R<n> (2 reg)", "INT32", "R200"],
+  ],
+  opcua: [
+    ["Tag PLC", "\"Nama_Tag\"", "BOOL", "\"Motor_Start\""], ["Member DB", "\"DB\".Member", "FLOAT32", "\"DB_Tank\".Level"],
+    ["Struct bertingkat", "\"DB\".Struct.Member", "INT16", "\"DB_Line\".Motor1.Speed"], ["Elemen Array", "\"DB\".Arr[i]", "INT16", "\"DB_Data\".Arr[3]"],
+    ["NodeId lengkap", "ns=3;s=...", "INT32", "ns=3;s=\"DB1\".\"Count\""],
+  ],
 };
 
 export function inferType(family, address) {
@@ -24,5 +42,7 @@ export function inferType(family, address) {
   }
   if (family === "modbus") return /^(0\d{4,5}|1\d{4,5}|C\d+|DI\d+|M\d+)$/.test(a) || a.includes(".") ? "BOOL" : "INT16";
   if (family === "internal") return a.startsWith("LB") ? "BOOL" : "INT16";
+  if (family === "opcua") return null;
+  if (family === "wecon" || family === "fatek") return /^[MXYSTC]\d+$/.test(a) || a.includes(".") ? "BOOL" : "INT16";
   return a.includes(".") ? "BOOL" : "INT16";
 }

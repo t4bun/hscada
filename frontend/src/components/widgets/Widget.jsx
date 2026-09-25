@@ -5,7 +5,9 @@ import { Trend, HistoryTrend, DataRecord, AlarmTable } from "./DataWidgets";
 import { BitButton, WordButton, BitLamp, WordLamp, CharDisplay, FuncButton } from "./MultiState";
 import { SymbolW } from "./Symbols";
 import { WIDGETS } from "./registry";
+import { AlertTriangle } from "lucide-react";
 import { assetUrl } from "@/lib/api";
+import { useRt } from "@/hooks/useLive";
 
 const MAP = {
   label: Label, rect: Rect, circle: CircleShape, line: Line, image: ImageW,
@@ -23,7 +25,15 @@ export const WidgetView = ({ w }) => {
   return <C p={p} w={w} />;
 };
 
-export const ScreenView = ({ screen, width, height }) => (
+const BadBadge = () => (
+  <span data-testid="widget-bad-quality" title="Bad/Offline — menampilkan nilai terakhir" className="absolute -top-2 -right-2 z-10 w-5 h-5 grid place-items-center rounded-full bg-amber-500 text-slate-950 shadow pointer-events-none">
+    <AlertTriangle size={11} strokeWidth={2.5} />
+  </span>
+);
+
+export const ScreenView = ({ screen, width, height }) => {
+  const { quality } = useRt();
+  return (
   <div
     className="relative overflow-hidden"
     style={{
@@ -34,7 +44,9 @@ export const ScreenView = ({ screen, width, height }) => (
     {screen.widgets.map((w) => (
       <div key={w.id} data-testid={`runtime-widget-${w.type}`} className="absolute" style={{ left: w.x, top: w.y, width: w.w, height: w.h }}>
         <WidgetView w={w} />
+        {quality?.[w.props?.tag] === "bad" && <BadBadge />}
       </div>
     ))}
   </div>
-);
+  );
+};

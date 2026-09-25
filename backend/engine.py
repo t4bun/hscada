@@ -2,11 +2,13 @@ import asyncio
 import logging
 import math
 import random
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
 
 from drivers import make_driver
+from plc_ext import is_conn_error, humanize
 from formats import clamp_value, to_engineering, to_raw, INT_TYPES
 
 log = logging.getLogger("engine")
@@ -32,6 +34,30 @@ class Engine:
         self.rec_last = {}
         self.def_active = {}
         self.def_loaded = False
+        self.locks = {}
+        self.stats = {}
+        self.quality = {}
+
+    def _stats(self, dev_id):
+        return self.stats.setdefault(dev_id, {"ok": 0, "fail": 0, "rtt_ms": None, "avg_ms": None, "last_ok": None, "attempts": 0})
+
+    def _count(self, dev_id, ok, fail, rtt=None):
+        st = self._stats(dev_id)
+        st["ok"] += ok
+        st["fail"] += fail
+        if rtt is not None:
+            st["rtt_ms"] = round(rtt, 1)
+            st["avg_ms"] = round(rtt if st["avg_ms"] is None else st["avg_ms"] * 0.8 + rtt * 0.2, 1)
+            st["last_ok"] = datetime.now(timezone.utc).isoformat()
+            st["attempts"] = 0
+        return st
+
+    def reset_driver(self, dev_id):
+        cur = self.drivers.pop(dev_id, None)
+        if cur:
+            cur[1].close()
+        self.retry_at.pop(dev_id, None)
+        self.stats.pop(dev_id, None)
 
     async def sample_records(self, t):
         now = datetime.now(timezone.utc)
@@ -148,27 +174,79 @@ class Engine:
             v = lo + (hi - lo) * (0.5 + 0.5 * math.sin(2 * math.pi * t / period + phase))
         return clamp_value(dt, int(tag.get("decimals") or 0), v)
 
-    def _read_device(self, dev, tags):
+    SIG_KEYS = ("protocol", "host", "port", "rack", "slot", "unit_id", "_order", "serial_port", "baudrate", "parity", "databits", "stopbits",
+                "timeout_ms", "opc_namespace", "opc_user", "opc_password", "opc_endpoint", "fins_src_node", "fins_dst_node", "local_tsap", "remote_tsap")
+
+    def _driver(self, dev):
         dev = self.with_order(dev)
-        sig = tuple(dev.get(k) for k in ("protocol", "host", "port", "rack", "slot", "unit_id", "_order", "serial_port", "baudrate", "parity", "databits", "stopbits"))
+        sig = tuple(dev.get(k) for k in self.SIG_KEYS)
         cur = self.drivers.get(dev["id"])
         if not cur or cur[0] != sig:
             if cur:
                 cur[1].close()
             cur = (sig, make_driver(dev))
             self.drivers[dev["id"]] = cur
-        drv, out, errors = cur[1], {}, []
-        for tag in tags:
+        return cur[1]
+
+    def _drop(self, dev_id):
+        cur = self.drivers.pop(dev_id, None)
+        if cur:
+            cur[1].close()
+
+    def _lock(self, dev_id):
+        return self.locks.setdefault(dev_id, threading.Lock())
+
+    def _read_device(self, dev, tags):
+        with self._lock(dev["id"]):
+            drv, out, errors, bad = self._driver(dev), {}, [], []
+            t0 = time.perf_counter()
+            for tag in tags:
+                try:
+                    raw = drv.read(tag["address"], tag["data_type"])
+                    out[tag["id"]] = to_engineering(tag["data_type"], int(tag.get("decimals") or 0), raw)
+                except Exception as e:
+                    if is_conn_error(e):
+                        self._drop(dev["id"])
+                        raise ConnectionError(humanize(dev, e))
+                    errors.append(f"{tag['name']}: {humanize(dev, e)}")
+                    bad.append(tag["id"])
+            return out, errors, bad, (time.perf_counter() - t0) * 1000 / max(1, len(tags))
+
+    def _write_device(self, dev, address, dtype, raw):
+        with self._lock(dev["id"]):
             try:
-                raw = drv.read(tag["address"], tag["data_type"])
-                out[tag["id"]] = to_engineering(tag["data_type"], int(tag.get("decimals") or 0), raw)
-            except (ConnectionError, OSError, TimeoutError, RuntimeError) as e:
-                drv.close()
-                self.drivers.pop(dev["id"], None)
-                raise ConnectionError(str(e))
+                self._driver(dev).write(address, dtype, raw)
             except Exception as e:
-                errors.append(f"{tag['name']}: {e}")
-        return out, errors
+                if is_conn_error(e):
+                    self._drop(dev["id"])
+                raise IOError(humanize(dev, e))
+
+    def _test_device(self, dev, tag):
+        with self._lock(dev["id"]):
+            t0 = time.perf_counter()
+            try:
+                drv = self._driver(dev)
+                drv.connect()
+                value = drv.read(tag["address"], tag["data_type"]) if tag else None
+            except Exception as e:
+                self._drop(dev["id"])
+                return {"ok": False, "message": humanize(dev, e)}
+            rtt = round((time.perf_counter() - t0) * 1000, 1)
+            where = dev.get("serial_port") if self.is_serial(dev) else f"{dev.get('host')}:{dev.get('port')}"
+            msg = f"Terhubung ke {where} ({rtt} ms)" + (f" · {tag['name']} = {value}" if tag else "")
+            return {"ok": True, "message": msg, "rtt_ms": rtt}
+
+    @staticmethod
+    def is_serial(dev):
+        from drivers import PROTOCOLS
+        return bool(PROTOCOLS.get(dev.get("protocol"), {}).get("serial"))
+
+    async def test(self, dev, tag=None):
+        self.retry_at.pop(dev["id"], None)
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(self._test_device, self.with_order(dev), tag), timeout=15)
+        except asyncio.TimeoutError:
+            return {"ok": False, "message": humanize(dev, TimeoutError("timed out"))}
 
     async def step(self):
         t = time.time()
@@ -179,25 +257,31 @@ class Engine:
         for dev_id, tags in by_dev.items():
             dev = self.devices[dev_id]
             pv = self.values.setdefault(dev["project_id"], {})
-            if self.is_internal(dev):
+            q = self.quality.setdefault(dev["project_id"], {})
+            if self.is_internal(dev) or dev.get("simulate", True):
+                sim = not self.is_internal(dev)
                 for tag in tags:
-                    pv[tag["id"]] = self.written.get(tag["id"], False if tag["data_type"] == "BOOL" else 0)
-                self.dev_status[dev_id] = {"status": "internal", "error": None}
-                continue
-            if dev.get("simulate", True):
-                for tag in tags:
-                    pv[tag["id"]] = self.sim_value(tag, t)
-                self.dev_status[dev_id] = {"status": "simulasi", "error": None}
+                    pv[tag["id"]] = self.sim_value(tag, t) if sim else self.written.get(tag["id"], False if tag["data_type"] == "BOOL" else 0)
+                    q[tag["id"]] = "good"
+                self.dev_status[dev_id] = {"status": "simulasi" if sim else "internal", "error": None}
                 continue
             if self.retry_at.get(dev_id, 0) > t:
                 continue
+            iv = max(1, int(dev.get("reconnect_s") or 5))
             try:
-                vals, errors = await asyncio.wait_for(asyncio.to_thread(self._read_device, dev, tags), timeout=8)
+                vals, errors, bad, rtt = await asyncio.wait_for(asyncio.to_thread(self._read_device, dev, tags), timeout=max(8, len(tags) * 2))
                 pv.update(vals)
-                self.dev_status[dev_id] = {"status": "online", "error": "; ".join(errors)[:300] or None}
+                q.update({k: "good" for k in vals})
+                q.update({k: "bad" for k in bad})
+                st = self._count(dev_id, len(vals), len(bad), rtt if vals else None)
+                self.dev_status[dev_id] = {"status": "error" if bad and not vals else "online", "error": "; ".join(errors)[:300] or None, "stats": st}
             except Exception as e:
-                self.retry_at[dev_id] = t + 5
-                self.dev_status[dev_id] = {"status": "offline", "error": str(e)[:300] or "Timeout"}
+                self.retry_at[dev_id] = t + iv
+                q.update({tag["id"]: "bad" for tag in tags})
+                st = self._count(dev_id, 0, len(tags))
+                st["attempts"] += 1
+                msg = str(e) if isinstance(e, ConnectionError) and str(e) else humanize(dev, e if str(e) else TimeoutError("timed out"))
+                self.dev_status[dev_id] = {"status": "reconnecting", "error": msg[:300], "stats": st, "retry_in": iv}
         await self.check_alarms()
         await self.check_alarm_defs()
         await self.sample_records(t)
@@ -258,17 +342,14 @@ class Engine:
             self.walk[tag["id"]] = v
         else:
             raw = v if dt in ("BOOL", "FLOAT32") else to_raw(dt, dec, v)
-            drv = make_driver(self.with_order(dev))
-            try:
-                await asyncio.wait_for(asyncio.to_thread(drv.write, tag["address"], dt, raw), timeout=6)
-            finally:
-                drv.close()
+            await asyncio.wait_for(asyncio.to_thread(self._write_device, dev, tag["address"], dt, raw), timeout=10)
         self.values.setdefault(tag["project_id"], {})[tag["id"]] = v
         return v
 
     def snapshot(self, project_id, device_ids):
         return {
             "values": self.values.get(project_id, {}),
+            "quality": self.quality.get(project_id, {}),
             "devices": {d: self.dev_status.get(d, {"status": "menunggu", "error": None}) for d in device_ids},
             "ts": datetime.now(timezone.utc).isoformat(),
         }

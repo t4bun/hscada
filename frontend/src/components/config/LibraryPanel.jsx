@@ -12,6 +12,7 @@ export const LibraryPanel = ({ projectId, devices, tags, protocols, onReload, on
   const [q, setQ] = useState("");
   const [result, setResult] = useState(null);
   const fileRef = useRef();
+  const [prefix, setPrefix] = useState("");
   const dev = devices.find((d) => d.id === devId);
   const family = protocols[dev?.protocol]?.family;
   const filtered = useMemo(() => tags.filter((t) => !q || `${t.name} ${t.address}`.toLowerCase().includes(q.toLowerCase())), [tags, q]);
@@ -23,6 +24,7 @@ export const LibraryPanel = ({ projectId, devices, tags, protocols, onReload, on
     const fd = new FormData();
     fd.append("file", file);
     fd.append("device_id", devId);
+    fd.append("symbol_prefix", prefix);
     try {
       const { data } = await api.post(`/projects/${projectId}/tags/import`, fd);
       setResult(data);
@@ -47,12 +49,13 @@ export const LibraryPanel = ({ projectId, devices, tags, protocols, onReload, on
           <select data-testid="library-device-select" className={sel} value={devId} onChange={(e) => setDevId(e.target.value)}>
             {devices.map((d) => <option key={d.id} value={d.id}>{`${d.name} · ${protocols[d.protocol]?.label || ""}`}</option>)}
           </select>
+          {family === "opcua" && <input data-testid="library-symbol-prefix-input" className={`${sel} font-mono w-44`} value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder={'Prefix DB, mis. "DB_Motor"'} title="Kosongkan untuk tag PLC; isi nama DB untuk member DB" />}
           <button data-testid="library-import-btn" disabled={!devId} onClick={() => fileRef.current.click()} className="h-9 px-3 flex items-center gap-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 rounded-sm disabled:opacity-40"><Upload size={14} />Import Tag (TIA Portal .xlsx / CSV)</button>
           <button data-testid="library-export-btn" onClick={doExport} className="h-9 px-3 flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 rounded-sm"><Download size={14} />Export CSV</button>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xlsm,.txt" hidden onChange={doImport} />
         </div>
       </div>
-      <p className="text-xs text-slate-500 max-w-3xl">Import dari TIA Portal: buka <b className="text-slate-300">PLC tags → tabel tag → Export</b> (file .xlsx berkolom Name, Data Type, Logical Address, Comment). CSV cukup punya kolom <span className="font-mono">Name, Address</span>; tipe data otomatis dari alamat bila kosong.</p>
+      <p className="text-xs text-slate-500 max-w-3xl">Import dari TIA Portal: buka <b className="text-slate-300">PLC tags → tabel tag → Export</b> (file .xlsx berkolom Name, Data Type, Logical Address, Comment). CSV cukup punya kolom <span className="font-mono">Name, Address</span>; tipe data otomatis dari alamat bila kosong.{family === "opcua" && <> Untuk perangkat <b className="text-slate-300">simbolik (OPC UA)</b>, nama tag langsung dipakai sebagai alamat simbol, misalnya <span className="font-mono text-cyan-300">"Motor1_Start"</span> atau dengan prefix DB <span className="font-mono text-cyan-300">"DB_Motor".Start</span>.</>}</p>
       {result && (
         <div data-testid="import-result" className="border border-slate-800 bg-[#111827] p-4 rounded-sm text-xs space-y-1">
           <p className="text-slate-200">Hasil import: <b className="text-emerald-400">{result.created}</b> dibuat dari {result.total} baris, <b className="text-amber-400">{result.skipped.length}</b> dilewati.</p>

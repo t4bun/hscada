@@ -1,4 +1,6 @@
+import mimetypes
 import os
+from pathlib import Path
 
 import requests
 
@@ -18,7 +20,15 @@ def init_storage(force: bool = False):
     return storage_key
 
 
+LOCAL_DIR = os.environ.get("LOCAL_STORAGE_DIR")
+
+
 def put_object(path: str, data: bytes, content_type: str) -> dict:
+    if LOCAL_DIR:
+        f = Path(LOCAL_DIR) / path
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(data)
+        return {"path": path, "size": len(data)}
     resp = requests.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": init_storage(), "Content-Type": content_type}, data=data, timeout=120)
     if resp.status_code == 404:
         resp = requests.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": init_storage(True), "Content-Type": content_type}, data=data, timeout=120)
@@ -27,6 +37,8 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
 
 
 def get_object(path: str):
+    if LOCAL_DIR:
+        return (Path(LOCAL_DIR) / path).read_bytes(), mimetypes.guess_type(path)[0] or "application/octet-stream"
     resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": init_storage()}, timeout=60)
     resp.raise_for_status()
     return resp.content, resp.headers.get("Content-Type", "application/octet-stream")

@@ -32,7 +32,7 @@ def parse_tag_file(filename: str, data: bytes):
     for hi, row in enumerate(rows[:10]):
         low = [str(c).strip().lower() for c in row]
         idx = {k: next((low.index(a) for a in aliases if a in low), None) for k, aliases in COLS.items()}
-        if idx["name"] is not None and idx["address"] is not None:
+        if idx["name"] is not None and (idx["address"] is not None or idx["data_type"] is not None):
             break
     else:
         raise ValueError("Header tidak ditemukan. Butuh kolom 'Name' dan 'Logical Address'/'Address'.")
@@ -40,10 +40,10 @@ def parse_tag_file(filename: str, data: bytes):
     for r in rows[hi + 1:]:
         get = lambda k: str(r[idx[k]]).strip() if idx[k] is not None and idx[k] < len(r) else ""
         name, addr = get("name"), get("address").lstrip("%").replace(" ", "")
-        if not name or not addr:
+        if not name:
             continue
         raw_type = re.sub(r"\s+", "", get("data_type").lower())
-        out.append({"name": re.sub(r"[^\w.\-]", "_", name), "address": addr, "raw_type": raw_type,
+        out.append({"name": re.sub(r"[^\w.\-]", "_", name), "raw_name": name.strip('"'), "address": addr, "raw_type": raw_type,
                     "data_type": TIA_TYPES.get(raw_type) if raw_type else None, "description": get("comment"),
                     "decimals": get("decimals"), "unit": get("unit")})
     return out

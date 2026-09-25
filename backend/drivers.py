@@ -3,18 +3,28 @@ import socket
 import struct
 
 PROTOCOLS = {
-    "s7_1200_1500": {"label": "Siemens S7-1200/1500", "family": "s7", "port": 102, "rack": 0, "slot": 1},
+    "s7_1200_1500": {"label": "Siemens S7-1200/1500 (Alamat Absolut)", "family": "s7", "port": 102, "rack": 0, "slot": 1},
+    "s7_1200_1500_sym": {"label": "Siemens S7-1200/1500 (Simbolik via OPC UA)", "family": "opcua", "port": 4840},
     "s7_300_400": {"label": "Siemens S7-300/400", "family": "s7", "port": 102, "rack": 0, "slot": 2},
-    "s7_200": {"label": "Siemens S7-200 / Smart", "family": "s7", "port": 102, "rack": 0, "slot": 1},
+    "s7_200": {"label": "Siemens S7-200 (CP243-1) / S7-200 SMART", "family": "s7", "port": 102, "rack": 0, "slot": 1, "tsap": True},
     "omron_fins": {"label": "Omron FINS TCP", "family": "fins", "port": 9600},
-    "wecon": {"label": "Wecon (Modbus TCP)", "family": "modbus", "port": 502},
+    "omron_fins_udp": {"label": "Omron FINS UDP", "family": "fins", "port": 9600, "udp": True},
+    "omron_hostlink": {"label": "Omron Host Link (Serial RS232/485)", "family": "hostlink", "port": 0, "serial": True},
+    "fatek_tcp": {"label": "Fatek FBs (Ethernet)", "family": "fatek", "port": 500},
+    "fatek_serial": {"label": "Fatek FBs (Serial RS232/485)", "family": "fatek", "port": 0, "serial": True},
+    "wecon": {"label": "Wecon (Modbus TCP, alamat D/M/X/Y)", "family": "wecon", "port": 502},
+    "wecon_rtu": {"label": "Wecon (Modbus RTU Serial, alamat D/M/X/Y)", "family": "wecon", "port": 0, "serial": True},
     "haiwell": {"label": "Haiwell (Modbus TCP)", "family": "modbus", "port": 502},
     "weintek": {"label": "Weintek (Modbus TCP)", "family": "modbus", "port": 502},
     "modbus_tcp": {"label": "Modbus TCP Generic", "family": "modbus", "port": 502},
-    "modbus_rtu": {"label": "Modbus RTU RS485 (Serial)", "family": "modbus", "port": 0, "serial": True},
+    "modbus_rtu": {"label": "Modbus RTU (Serial RS485/RS232/RS422)", "family": "modbus", "port": 0, "serial": True},
     "modbus_rtu_tcp": {"label": "Modbus RTU over TCP (Gateway RS485)", "family": "modbus", "port": 502},
     "internal": {"label": "SCADA Internal Memory (LB/LW)", "family": "internal", "port": 0},
 }
+
+
+class PlcError(Exception):
+    """PLC answered but rejected the request (bad address / area) - connection still OK."""
 
 TYPE_SIZE = {"BOOL": 1, "INT16": 2, "UINT16": 2, "INT32": 4, "UINT32": 4, "FLOAT32": 4}
 TYPE_FMT = {"INT16": ">h", "UINT16": ">H", "INT32": ">i", "UINT32": ">I", "FLOAT32": ">f"}
@@ -70,8 +80,15 @@ class S7Driver:
         self.client = snap7.client.Client()
 
     def connect(self):
-        if not self.client.get_connected():
-            self.client.connect(self.dev["host"], int(self.dev.get("rack") or 0), int(self.dev.get("slot") or 1), int(self.dev.get("port") or 102))
+        if self.client.get_connected():
+            return
+        d = self.dev
+        rack, slot, port = int(d.get("rack") or 0), int(d.get("slot") or 1), int(d.get("port") or 102)
+        if d.get("local_tsap") and d.get("remote_tsap"):
+            self.client.set_connection_params(d["host"], int(str(d["local_tsap"]).replace(".", ""), 16), int(str(d["remote_tsap"]).replace(".", ""), 16))
+            self.client._connect(d["host"], rack, slot, port)
+        else:
+            self.client.connect(d["host"], rack, slot, port)
 
     def _area(self, name):
         from snap7.type import Area
@@ -129,26 +146,37 @@ class ModbusDriver:
     def __init__(self, dev):
         from pymodbus import FramerType
         from pymodbus.client import ModbusTcpClient, ModbusSerialClient
+        from plc_ext import parse_wecon, dev_timeout
         self.dev = dev
         self.unit = int(dev.get("unit_id") or 1)
         self.swap = dev.get("_order") or "ABCD"
-        if dev["protocol"] == "modbus_rtu":
+        self.parse = parse_wecon if PROTOCOLS[dev["protocol"]]["family"] == "wecon" else parse_modbus
+        self.serial = bool(PROTOCOLS[dev["protocol"]].get("serial"))
+        tmo = dev_timeout(dev)
+        if self.serial:
             self.client = ModbusSerialClient(
-                port=dev.get("serial_port") or "/dev/ttyUSB0", baudrate=int(dev.get("baudrate") or 9600),
+                port=dev.get("serial_port") or "COM1", baudrate=int(dev.get("baudrate") or 9600),
                 bytesize=int(dev.get("databits") or 8), parity=(dev.get("parity") or "N")[0], stopbits=int(dev.get("stopbits") or 1),
-                timeout=1, retries=1)
+                timeout=tmo, retries=1)
         elif dev["protocol"] == "modbus_rtu_tcp":
-            self.client = ModbusTcpClient(dev["host"], port=int(dev.get("port") or 502), framer=FramerType.RTU, timeout=2)
+            self.client = ModbusTcpClient(dev["host"], port=int(dev.get("port") or 502), framer=FramerType.RTU, timeout=tmo)
         else:
-            self.client = ModbusTcpClient(dev["host"], port=int(dev.get("port") or 502), timeout=2)
+            self.client = ModbusTcpClient(dev["host"], port=int(dev.get("port") or 502), timeout=tmo)
 
     def connect(self):
-        if not self.client.connected and not self.client.connect():
-            raise ConnectionError("Tidak dapat terhubung ke perangkat Modbus")
+        if self.client.connected or self.client.connect():
+            return
+        if self.serial:
+            import serial
+            try:
+                serial.Serial(self.dev.get("serial_port") or "COM1").close()
+            except Exception as e:
+                raise ConnectionError(str(e))
+        raise ConnectionError("Tidak dapat terhubung ke perangkat Modbus (timeout)")
 
     def read(self, address, dtype):
         self.connect()
-        p = parse_modbus(address)
+        p = self.parse(address)
         if p["kind"] in ("coil", "di"):
             fn = self.client.read_coils if p["kind"] == "coil" else self.client.read_discrete_inputs
             r = fn(p["addr"], count=1, device_id=self.unit)
@@ -167,7 +195,7 @@ class ModbusDriver:
 
     def write(self, address, dtype, value):
         self.connect()
-        p = parse_modbus(address)
+        p = self.parse(address)
         if p["kind"] == "coil":
             self.client.write_coil(p["addr"], bool(value), device_id=self.unit)
             return
@@ -209,11 +237,29 @@ class FinsDriver:
         self.order = dev.get("_order") or "CDAB"
         self.sock = None
         self.sid = 0
+        self.udp = bool(PROTOCOLS[dev["protocol"]].get("udp"))
+
+    @staticmethod
+    def _octet(ip, fallback=0):
+        try:
+            return int(str(ip).split(".")[-1])
+        except ValueError:
+            return fallback
 
     def connect(self):
         if self.sock:
             return
-        s = socket.create_connection((self.dev["host"], int(self.dev.get("port") or 9600)), timeout=2)
+        from plc_ext import dev_timeout
+        addr = (self.dev["host"], int(self.dev.get("port") or 9600))
+        if self.udp:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(dev_timeout(self.dev))
+            s.connect(addr)
+            self.server_node = int(self.dev.get("fins_dst_node") or 0) or self._octet(self.dev["host"])
+            self.client_node = int(self.dev.get("fins_src_node") or 0) or self._octet(s.getsockname()[0], 1)
+            self.sock = s
+            return
+        s = socket.create_connection(addr, timeout=dev_timeout(self.dev))
         s.sendall(b"FINS" + struct.pack(">IIII", 12, 0, 0, 0))
         resp = s.recv(24)
         if len(resp) < 24:
@@ -226,11 +272,17 @@ class FinsDriver:
         self.sid = (self.sid + 1) % 256
         hdr = bytes([0x80, 0x00, 0x02, 0x00, self.server_node, 0x00, 0x00, self.client_node, 0x00, self.sid])
         frame = hdr + body
-        self.sock.sendall(b"FINS" + struct.pack(">III", len(frame) + 8, 2, 0) + frame)
-        resp = self.sock.recv(2048)
-        if len(resp) < 30 or resp[28:30] != b"\x00\x00":
-            raise IOError("Respon FINS error")
-        return resp[30:]
+        if self.udp:
+            self.sock.send(frame)
+            resp, off = self.sock.recv(2048), 12
+        else:
+            self.sock.sendall(b"FINS" + struct.pack(">III", len(frame) + 8, 2, 0) + frame)
+            resp, off = self.sock.recv(2048), 28
+        if len(resp) < off + 2:
+            raise IOError("Respon FINS terlalu pendek")
+        if resp[off:off + 2] != b"\x00\x00":
+            raise PlcError(f"FINS end code {resp[off:off + 2].hex()}")
+        return resp[off + 2:]
 
     def read(self, address, dtype):
         self.connect()
@@ -262,8 +314,10 @@ class FinsDriver:
 
 
 def make_driver(dev):
+    import plc_ext
     family = PROTOCOLS[dev["protocol"]]["family"]
-    return {"s7": S7Driver, "modbus": ModbusDriver, "fins": FinsDriver}[family](dev)
+    return {"s7": S7Driver, "modbus": ModbusDriver, "wecon": ModbusDriver, "fins": FinsDriver, "hostlink": plc_ext.HostLinkDriver,
+            "fatek": plc_ext.FatekDriver, "opcua": plc_ext.OpcUaDriver}[family](dev)
 
 
 def parse_internal(address: str):
@@ -274,8 +328,10 @@ def parse_internal(address: str):
 
 
 def validate_address(protocol: str, address: str):
+    import plc_ext
     family = PROTOCOLS[protocol]["family"]
-    {"s7": parse_s7, "modbus": parse_modbus, "fins": parse_fins, "internal": parse_internal}[family](address)
+    {"s7": parse_s7, "modbus": parse_modbus, "fins": parse_fins, "internal": parse_internal, "wecon": plc_ext.parse_wecon,
+     "hostlink": plc_ext.parse_hostlink, "fatek": plc_ext.parse_fatek, "opcua": plc_ext.parse_opcua}[family](address)
 
 
 def infer_type(protocol: str, address: str) -> str:
@@ -295,4 +351,13 @@ def infer_type(protocol: str, address: str) -> str:
         return "BOOL" if p["kind"] in ("coil", "di") or p["bit"] is not None else "INT16"
     if family == "internal":
         return "BOOL" if a.startswith("LB") else "INT16"
+    if family in ("wecon", "fatek"):
+        import plc_ext
+        try:
+            p = (plc_ext.parse_wecon if family == "wecon" else plc_ext.parse_fatek)(a)
+        except ValueError:
+            return "INT16"
+        return "BOOL" if p["kind"] in ("coil", "di", "bit") or p["bit"] is not None else "INT16"
+    if family == "opcua":
+        return "FLOAT32"
     return "BOOL" if "." in a else "INT16"

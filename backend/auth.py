@@ -26,8 +26,10 @@ def create_token(user_id: str, email: str, kind: str, delta: timedelta) -> str:
 def set_auth_cookies(response, user_id: str, email: str) -> str:
     access = create_token(user_id, email, "access", timedelta(hours=12))
     refresh = create_token(user_id, email, "refresh", timedelta(days=7))
-    response.set_cookie("access_token", access, httponly=True, secure=True, samesite="none", max_age=43200, path="/")
-    response.set_cookie("refresh_token", refresh, httponly=True, secure=True, samesite="none", max_age=604800, path="/")
+    secure = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
+    samesite = "none" if secure else "lax"
+    response.set_cookie("access_token", access, httponly=True, secure=secure, samesite=samesite, max_age=43200, path="/")
+    response.set_cookie("refresh_token", refresh, httponly=True, secure=secure, samesite=samesite, max_age=604800, path="/")
     return access
 
 

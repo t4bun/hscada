@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Pencil, Trash2, PlugZap, Server, LayoutDashboard, Bell } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Server, LayoutDashboard, Bell } from "lucide-react";
+import { DeviceCard } from "@/components/config/DeviceCard";
 import { api, errMsg } from "@/lib/api";
 import { useLive } from "@/hooks/useLive";
 import { formatValue } from "@/lib/format";
@@ -12,31 +13,6 @@ import { SecurityPanel } from "@/components/config/SecurityPanel";
 import { SettingsPanel } from "@/components/config/SettingsPanel";
 import { DataAlarmPanel } from "@/components/config/DataAlarmPanel";
 
-const ST = { online: "bg-emerald-500 text-emerald-400", simulasi: "bg-cyan-500 text-cyan-400", internal: "bg-violet-500 text-violet-300", offline: "bg-red-500 text-red-400", menunggu: "bg-slate-500 text-slate-400" };
-
-const DeviceCard = ({ d, i, status, protocols, onEdit, onDelete, onTest }) => {
-  const st = status?.status || "menunggu";
-  return (
-    <div data-testid={`device-card-${i}`} className="border border-slate-800 bg-[#111827] p-5 rounded-sm space-y-3 hmi-rise" style={{ animationDelay: `${i * 50}ms` }}>
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="font-heading font-bold text-white">{d.name}</p>
-          <p className="text-xs text-slate-400">{protocols[d.protocol]?.label}</p>
-        </div>
-        <span data-testid={`device-status-${i}`} className={`text-[10px] font-mono font-bold flex items-center gap-1.5 ${ST[st].split(" ")[1]}`}>
-          <span className={`w-2 h-2 rounded-full ${ST[st].split(" ")[0]} ${st !== "offline" ? "animate-pulse" : ""}`} />{st.toUpperCase()}
-        </span>
-      </div>
-      <p className="font-mono text-xs text-slate-300">{d.host}:{d.port}{protocols[d.protocol]?.family === "s7" ? ` · R${d.rack}/S${d.slot}` : protocols[d.protocol]?.family === "modbus" ? ` · ID ${d.unit_id}` : ""}</p>
-      {status?.error && <p className="text-[11px] text-red-400 font-mono break-words">{status.error}</p>}
-      <div className="flex gap-1.5 pt-1">
-        <button data-testid={`device-test-${i}`} onClick={() => onTest(d)} className="h-8 px-3 text-xs flex items-center gap-1 bg-slate-800 hover:bg-slate-700 rounded-sm"><PlugZap size={13} />Tes Koneksi</button>
-        <button data-testid={`device-edit-${i}`} onClick={() => onEdit(d)} className="h-8 w-8 grid place-items-center bg-slate-800 hover:bg-slate-700 rounded-sm"><Pencil size={13} /></button>
-        <button data-testid={`device-delete-${i}`} onClick={() => onDelete(d)} className="h-8 w-8 grid place-items-center bg-slate-800 hover:bg-red-800 rounded-sm"><Trash2 size={13} /></button>
-      </div>
-    </div>
-  );
-};
 
 export default function ProjectConfig() {
   const { id } = useParams();
@@ -47,6 +23,7 @@ export default function ProjectConfig() {
   const [devDlg, setDevDlg] = useState({ open: false, device: null });
   const [tagDlg, setTagDlg] = useState({ open: false, tag: null });
   const [tab, setTab] = useState("devices");
+  const [tests, setTests] = useState({});
   const live = useLive(`/projects/${id}/rt`, !!project);
 
   const load = () => Promise.all([api.get(`/projects/${id}`), api.get(`/projects/${id}/devices`), api.get(`/projects/${id}/tags`), api.get("/meta")])
@@ -57,7 +34,11 @@ export default function ProjectConfig() {
 
   const test = async (d) => {
     const t = toast.loading("Menguji koneksi...");
-    try { const { data } = await api.post(`/devices/${d.id}/test`); toast[data.ok ? "success" : "error"](data.message, { id: t }); } catch (e) { toast.error(errMsg(e), { id: t }); }
+    try {
+      const { data } = await api.post(`/devices/${d.id}/test`);
+      setTests((s) => ({ ...s, [d.id]: data }));
+      toast[data.ok ? "success" : "error"](data.message, { id: t });
+    } catch (e) { toast.error(errMsg(e), { id: t }); }
   };
   const delDevice = async (d) => { if (!window.confirm(`Hapus perangkat ${d.name} beserta tag-nya?`)) return; await api.delete(`/devices/${d.id}`); load(); };
   const delTag = async (t) => { if (!window.confirm(`Hapus tag ${t.name}?`)) return; await api.delete(`/tags/${t.id}`); load(); };
@@ -93,10 +74,10 @@ export default function ProjectConfig() {
             <button data-testid="add-device-btn" onClick={() => setDevDlg({ open: true, device: null })} className="h-9 px-4 flex items-center gap-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 rounded-sm"><Plus size={14} />Tambah Perangkat</button>
           </div>
           {devices.length === 0 ? (
-            <div className="border border-dashed border-slate-700 p-10 text-center rounded-sm text-slate-400 text-sm"><Server className="mx-auto mb-3 text-slate-600" />Belum ada perangkat. Tambahkan PLC (S7, Omron, Wecon, Haiwell, Weintek, Modbus).</div>
+            <div className="border border-dashed border-slate-700 p-10 text-center rounded-sm text-slate-400 text-sm"><Server className="mx-auto mb-3 text-slate-600" />Belum ada perangkat. Tambahkan PLC (Siemens S7, Omron, Fatek, Wecon, Haiwell, Weintek, Modbus TCP/RTU).</div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {devices.map((d, i) => <DeviceCard key={d.id} d={d} i={i} status={live.snap.devices?.[d.id]} protocols={protocols} onEdit={(x) => setDevDlg({ open: true, device: x })} onDelete={delDevice} onTest={test} />)}
+              {devices.map((d, i) => <DeviceCard key={d.id} d={d} i={i} status={live.snap.devices?.[d.id]} test={tests[d.id]} protocols={protocols} onEdit={(x) => setDevDlg({ open: true, device: x })} onDelete={delDevice} onTest={test} />)}
             </div>
           )}
         </section>
@@ -119,7 +100,7 @@ export default function ProjectConfig() {
                     <td className="px-4 py-2.5 font-mono text-xs">{t.data_type}</td>
                     <td className="px-4 py-2.5 font-mono text-xs">{t.decimals}</td>
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-400">{t.max_chars}</td>
-                    <td className="px-4 py-2.5 font-mono text-emerald-400 font-semibold" data-testid={`tag-live-${i}`}>{formatValue(live.snap.values[t.id], t.data_type, t.decimals)} <span className="text-slate-500 text-xs font-normal">{t.unit}</span></td>
+                    <td className={`px-4 py-2.5 font-mono font-semibold ${live.snap.quality?.[t.id] === "bad" ? "text-amber-400" : "text-emerald-400"}`} data-testid={`tag-live-${i}`}>{formatValue(live.snap.values[t.id], t.data_type, t.decimals)} <span className="text-slate-500 text-xs font-normal">{t.unit}</span>{live.snap.quality?.[t.id] === "bad" && <span data-testid={`tag-bad-${i}`} className="ml-2 text-[9px] px-1.5 py-0.5 bg-amber-500/15 border border-amber-500/40 text-amber-300 rounded-sm">BAD/OFFLINE</span>}</td>
                     <td className="px-4 py-2.5 text-xs">{t.alarm_enabled ? <span className="text-amber-400 font-mono">{t.data_type === "BOOL" ? "BOOL" : ["hh", "h", "l", "ll"].filter((k) => t[k] != null).map((k) => k.toUpperCase()).join("/")}</span> : <span className="text-slate-600">-</span>}</td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap">
                       <button data-testid={`tag-edit-${i}`} onClick={() => setTagDlg({ open: true, tag: t })} className="h-7 w-7 inline-grid place-items-center hover:bg-slate-800 rounded-sm text-slate-400 hover:text-white"><Pencil size={13} /></button>
