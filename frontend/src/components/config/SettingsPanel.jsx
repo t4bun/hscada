@@ -50,6 +50,9 @@ export const SettingsPanel = ({ project, onSaved }) => {
       <Card title="Penyimpanan Data Record">
         <RetentionCard projectId={project.id} s={s} set={set} saveSettings={save} />
       </Card>
+      <Card title="Penyimpanan Riwayat Alarm">
+        <RetentionCard kind="alarm" projectId={project.id} s={s} set={set} saveSettings={save} />
+      </Card>
       <Card title="Security">
         <div className="flex items-center justify-between">
           <div><p className="text-sm">Wajib Login Klien</p><p className="text-xs text-slate-500">Web app yang dipublish meminta username/password sesuai group (atur di tab Keamanan). Default user: admin / admin123.</p></div>

@@ -41,13 +41,23 @@ class AlarmDefIn(BaseModel):
     popup_once: bool = True
 
 
-def retention(settings: Optional[dict]):
+def retention(settings: Optional[dict], kind: str = "record"):
     s = settings or {}
-    return bool(s.get("record_retention_enabled", True)), min(3650, max(1, int(s.get("record_retention_days") or 90)))
+    return bool(s.get(f"{kind}_retention_enabled", True)), min(3650, max(1, int(s.get(f"{kind}_retention_days") or 90)))
 
 
 def iso(ts):
     return ts.replace(tzinfo=timezone.utc).isoformat() if ts else None
+
+
+async def cleanup_alarms(p: dict) -> int:
+    on, days = retention(p.get("settings"), "alarm")
+    if not on:
+        return 0
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    res = await db.alarms.delete_many({"project_id": p["id"], "active": False, "ts_in": {"$lt": cutoff}})
+    await db.projects.update_one({"id": p["id"]}, {"$set": {"alarm_cleanup": {"at": datetime.now(timezone.utc).isoformat(), "deleted": res.deleted_count, "cutoff": cutoff}}})
+    return res.deleted_count
 
 
 async def cleanup_project(p: dict) -> int:
@@ -64,6 +74,30 @@ async def cleanup_project(p: dict) -> int:
 async def cleanup_all():
     async for p in db.projects.find({}, {"_id": 0, "id": 1, "settings": 1}):
         await cleanup_project(p)
+        await cleanup_alarms(p)
+
+
+@router.get("/projects/{pid}/alarms/storage")
+async def alarm_storage(pid: str, user=Depends(get_current_user)):
+    await engineer_project(pid, user)
+    p = await db.projects.find_one({"id": pid}, {"_id": 0, "settings": 1, "alarm_cleanup": 1})
+    q = {"project_id": pid}
+    n = await db.alarms.count_documents(q)
+    first = await db.alarms.find_one(q, {"_id": 0, "ts_in": 1}, sort=[("ts_in", 1)])
+    last = await db.alarms.find_one(q, {"_id": 0, "ts_in": 1}, sort=[("ts_in", -1)])
+    on, days = retention(p.get("settings"), "alarm")
+    return {"samples": n, "oldest": first and first["ts_in"], "newest": last and last["ts_in"], "est_bytes": n * 400,
+            "enabled": on, "days": days, "last_cleanup": p.get("alarm_cleanup")}
+
+
+@router.post("/projects/{pid}/alarms/cleanup")
+async def alarm_cleanup_now(pid: str, user=Depends(get_current_user)):
+    await engineer_project(pid, user)
+    p = await db.projects.find_one({"id": pid}, {"_id": 0, "id": 1, "settings": 1})
+    on, days = retention(p.get("settings"), "alarm")
+    if not on:
+        raise HTTPException(400, "Hapus otomatis alarm sedang nonaktif")
+    return {"deleted": await cleanup_alarms(p), "days": days}
 
 
 @router.get("/projects/{pid}/records/storage")

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRt } from "@/hooks/useLive";
 import { formatValue, specFor } from "@/lib/format";
+import { toast } from "sonner";
 import { useCanOperate as useCanOp } from "./MultiState";
 
 const useCanOperate = (minLevel) => useCanOp(minLevel);
@@ -79,10 +80,12 @@ const NumBox = ({ p, children }) => (
 export const Numeric = ({ p }) => {
   const { values } = useRt();
   const txt = formatValue(values[p.tag], p.data_type, p.decimals);
+  const v = values[p.tag];
+  const out = typeof v === "number" && ((p.min !== undefined && p.min !== "" && v < Number(p.min)) || (p.max !== undefined && p.max !== "" && v > Number(p.max)));
   return (
     <NumBox p={p}>
       <div className="flex items-baseline gap-1 w-full" style={{ justifyContent: { left: "flex-start", center: "center", right: "flex-end" }[p.align] }}>
-        <span data-testid="hmi-numeric-value" style={{ fontFamily: p.font_family, fontSize: p.font_size, color: p.color }} className="font-semibold tabular-nums leading-none">{txt}</span>
+        <span data-testid="hmi-numeric-value" data-out-of-range={out ? "true" : "false"} title={out ? `Di luar batas ${p.min} … ${p.max}` : undefined} style={{ fontFamily: p.font_family, fontSize: p.font_size, color: out ? "#EF4444" : p.color }} className="font-semibold tabular-nums leading-none">{txt}</span>
         {p.unit && <span className="text-xs text-slate-400">{p.unit}</span>}
       </div>
     </NumBox>
@@ -100,7 +103,13 @@ export const NumericInput = ({ p }) => {
     if (draft === null) return;
     const n = Number(draft);
     if (Number.isNaN(n)) return setDraft(null);
-    write(p.tag, Math.min(sp.max, Math.max(sp.min, Number(n.toFixed(sp.decimals)))));
+    const lo = p.min === undefined || p.min === "" ? sp.min : Number(p.min);
+    const hi = p.max === undefined || p.max === "" ? sp.max : Number(p.max);
+    if (n < lo || n > hi) {
+      toast.error(`Nilai harus ${lo} … ${hi}`);
+      return setDraft(null);
+    }
+    write(p.tag, Number(n.toFixed(sp.decimals)));
     setDraft(null);
   };
   return (

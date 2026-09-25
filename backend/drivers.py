@@ -26,8 +26,23 @@ PROTOCOLS = {
 class PlcError(Exception):
     """PLC answered but rejected the request (bad address / area) - connection still OK."""
 
-TYPE_SIZE = {"BOOL": 1, "INT16": 2, "UINT16": 2, "INT32": 4, "UINT32": 4, "FLOAT32": 4}
-TYPE_FMT = {"INT16": ">h", "UINT16": ">H", "INT32": ">i", "UINT32": ">I", "FLOAT32": ">f"}
+TYPE_SIZE = {"BOOL": 1, "INT16": 2, "UINT16": 2, "INT32": 4, "UINT32": 4, "FLOAT32": 4, "BCD16": 2, "BCD32": 4, "STRING": 2}
+TYPE_FMT = {"INT16": ">h", "UINT16": ">H", "INT32": ">i", "UINT32": ">I", "FLOAT32": ">f", "BCD16": ">H", "BCD32": ">I"}
+
+
+def bcd_decode(n: int) -> int:
+    s = f"{n:X}"
+    if not s.isdigit():
+        raise PlcError(f"Nilai 0x{s} bukan BCD valid")
+    return int(s)
+
+
+def bcd_encode(v) -> int:
+    return int(str(max(0, int(v))), 16)
+
+
+def text_from(data: bytes, n: int) -> str:
+    return bytes(data[:n]).split(b"\x00")[0].decode("latin-1", errors="ignore")
 BYTE_ORDERS = {"ABCD": (0, 1, 2, 3), "CDAB": (2, 3, 0, 1), "BADC": (1, 0, 3, 2), "DCBA": (3, 2, 1, 0)}
 
 
@@ -42,11 +57,12 @@ def reorder(data: bytes, order: str) -> bytes:
 
 def decode_bytes(dtype: str, data: bytes, order: str = "ABCD"):
     data = reorder(bytes(data[: TYPE_SIZE[dtype]]), order)
-    return struct.unpack(TYPE_FMT[dtype], data)[0]
+    v = struct.unpack(TYPE_FMT[dtype], data)[0]
+    return bcd_decode(v) if dtype.startswith("BCD") else v
 
 
 def encode_bytes(dtype: str, value, order: str = "ABCD") -> bytes:
-    v = float(value) if dtype == "FLOAT32" else int(value)
+    v = float(value) if dtype == "FLOAT32" else (bcd_encode(value) if dtype.startswith("BCD") else int(value))
     return reorder(struct.pack(TYPE_FMT[dtype], v), order)
 
 
@@ -101,6 +117,11 @@ class S7Driver:
         if dtype == "BOOL":
             return bool((data[0] >> p["bit"]) & 1)
         return decode_bytes(dtype, bytes(data), self.order)
+
+    def read_string(self, address, n):
+        self.connect()
+        p = parse_s7(address)
+        return text_from(self.client.read_area(self._area(p["area"]), p["db"], p["start"], n), n)
 
     def write(self, address, dtype, value):
         self.connect()
@@ -192,6 +213,15 @@ class ModbusDriver:
         if dtype == "BOOL":
             return bool((r.registers[0] >> (p["bit"] or 0)) & 1)
         return decode_bytes(dtype, data, self.swap)
+
+    def read_string(self, address, n):
+        self.connect()
+        p = self.parse(address)
+        fn = self.client.read_holding_registers if p["kind"] == "hr" else self.client.read_input_registers
+        r = fn(p["addr"], count=(n + 1) // 2, device_id=self.unit)
+        if r.isError():
+            raise IOError(str(r))
+        return text_from(b"".join(struct.pack(">H", x) for x in r.registers), n)
 
     def write(self, address, dtype, value):
         self.connect()
@@ -296,6 +326,12 @@ class FinsDriver:
         if dtype == "BOOL":
             return bool(struct.unpack(">H", data[:2])[0] & 1)
         return decode_bytes(dtype, data, self.order)
+
+    def read_string(self, address, n):
+        self.connect()
+        p = parse_fins(address)
+        data = self._cmd(b"\x01\x01" + bytes([FINS_AREAS[p["area"]][0]]) + struct.pack(">HBH", p["addr"], 0, (n + 1) // 2))
+        return text_from(data, n)
 
     def write(self, address, dtype, value):
         self.connect()

@@ -73,7 +73,7 @@ class Engine:
             if t - self.rec_last.get(r["id"], 0) < max(1, int(r.get("interval_s") or 5)) - 0.05:
                 continue
             pv = self.values.get(r["project_id"], {})
-            vals = {c: float(pv[c]) for c in r.get("channels", []) if pv.get(c) is not None}
+            vals = {c: float(pv[c]) for c in r.get("channels", []) if isinstance(pv.get(c), (int, float))}
             if vals:
                 docs.append({"project_id": r["project_id"], "record": r["number"], "ts": now, "v": vals})
             self.rec_last[r["id"]] = t
@@ -96,7 +96,7 @@ class Engine:
         names = {t["id"]: t["name"] for t in self.tags}
         for d in self.alarm_defs:
             v = self.values.get(d["project_id"], {}).get(d["tag_id"])
-            active = v is not None and self.def_state(d, v)
+            active = isinstance(v, (int, float)) and self.def_state(d, v)
             cur = self.def_active.get(d["id"])
             if active and not cur:
                 aid = str(uuid.uuid4())
@@ -161,6 +161,8 @@ class Engine:
 
     def sim_value(self, tag, t):
         tid, dt = tag["id"], tag["data_type"]
+        if dt == "STRING":
+            return self.written.get(tid, "SIMULASI"[: int(tag.get("length") or 16)])
         mode = tag.get("sim_mode") or ("static" if dt == "BOOL" else "sine")
         lo, hi = float(tag.get("sim_min") or 0), float(tag.get("sim_max") or 100)
         period = max(float(tag.get("sim_period") or 30), 2)
@@ -211,7 +213,10 @@ class Engine:
             t0 = time.perf_counter()
             for tag in tags:
                 try:
-                    raw = drv.read(tag["address"], tag["data_type"])
+                    if tag["data_type"] == "STRING":
+                        raw = drv.read_string(tag["address"], max(1, min(256, int(tag.get("length") or 16))))
+                    else:
+                        raw = drv.read(tag["address"], tag["data_type"])
                     out[tag["id"]] = to_engineering(tag["data_type"], int(tag.get("decimals") or 0), raw)
                 except Exception as e:
                     if is_conn_error(e):
@@ -302,7 +307,7 @@ class Engine:
         docs = []
         for tag in self.tags:
             v = self.values.get(tag["project_id"], {}).get(tag["id"])
-            if v is not None and tag.get("log_enabled", True):
+            if isinstance(v, (int, float)) and tag.get("log_enabled", True):
                 docs.append({"project_id": tag["project_id"], "tag_id": tag["id"], "ts": now, "v": float(v)})
         if docs:
             await self.db.tag_history.insert_many(docs)
@@ -320,7 +325,7 @@ class Engine:
         now = datetime.now(timezone.utc).isoformat()
         for tag in self.tags:
             v = self.values.get(tag["project_id"], {}).get(tag["id"])
-            level = self.level_for(tag, v) if (tag.get("alarm_enabled") and v is not None) else None
+            level = self.level_for(tag, v) if (tag.get("alarm_enabled") and isinstance(v, (int, float))) else None
             cur = self.active_alarms.get(tag["id"])
             if (cur[1] if cur else None) == level:
                 continue

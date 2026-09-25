@@ -11,7 +11,7 @@ export const ImportProjectDialog = ({ open, onOpenChange, onDone }) => {
   const [publish, setPublish] = useState(true);
   const [busy, setBusy] = useState(false);
   const run = async () => {
-    if (!file) return toast.error("Pilih file project (.nhmi)");
+    if (!file) return toast.error("Pilih file project (.tbn)");
     const fd = new FormData();
     fd.append("file", file);
     fd.append("publish", publish ? "true" : "false");
@@ -30,12 +30,12 @@ export const ImportProjectDialog = ({ open, onOpenChange, onDone }) => {
       <DialogContent className="bg-[#111827] border-slate-700 text-slate-100 max-w-md" data-testid="import-project-dialog">
         <DialogHeader>
           <DialogTitle className="font-heading">Import Project</DialogTitle>
-          <DialogDescription className="text-slate-400">File .nhmi berisi layar, widget, perangkat, tag, alarm, data record, keamanan, pengaturan, dan gambar/shape (tanpa data histori).</DialogDescription>
+          <DialogDescription className="text-slate-400">File .tbn berisi layar, widget, perangkat, tag, alarm, data record, keamanan, pengaturan, dan gambar/shape (tanpa data histori).</DialogDescription>
         </DialogHeader>
         <button data-testid="import-file-btn" onClick={() => ref.current.click()} className="h-24 border border-dashed border-slate-600 hover:border-blue-500 rounded-sm flex flex-col items-center justify-center gap-1 text-sm text-slate-300 transition-colors">
-          <FileUp size={20} />{file ? <span data-testid="import-file-name" className="font-mono text-xs text-emerald-300">{file.name}</span> : "Pilih file .nhmi"}
+          <FileUp size={20} />{file ? <span data-testid="import-file-name" className="font-mono text-xs text-emerald-300">{file.name}</span> : "Pilih file .tbn"}
         </button>
-        <input ref={ref} data-testid="import-file-input" type="file" accept=".nhmi,.json" hidden onChange={(e) => setFile(e.target.files?.[0] || null)} />
+        <input ref={ref} data-testid="import-file-input" type="file" accept=".tbn,.nhmi,.json" hidden onChange={(e) => setFile(e.target.files?.[0] || null)} />
         <div className="flex items-center justify-between border border-slate-800 bg-[#0B0F17] p-3 rounded-sm">
           <div><p className="text-sm">Langsung Publish</p><p className="text-xs text-slate-500">Runtime langsung aktif setelah import.</p></div>
           <Switch data-testid="import-publish-switch" checked={publish} onCheckedChange={setPublish} />

@@ -1,23 +1,23 @@
-# NusaHMI SCADA — Versi Lokal (On-Premise)
+# Scada by T4bun — Versi Lokal (On-Premise)
 
 Seluruh aplikasi (editor, runtime, data record, alarm, trend, PDF) berjalan di PC pabrik dan membaca PLC langsung tanpa internet.
 
 ## Instalasi di PC pabrik (Windows 10/11 64-bit)
-1. Jalankan `NusaHMI-Setup-x.y.z.exe` sebagai Administrator.
+1. Jalankan `ScadaT4bun-Setup-x.y.z.exe` sebagai Administrator.
 2. Installer akan: membuat konfigurasi, membuka port firewall **8080**, mendaftarkan autostart saat PC menyala, lalu menjalankan aplikasi.
-3. Login engineer ada di `C:\ProgramData\NusaHMI\LOGIN-ADMIN.txt`.
+3. Login engineer ada di `C:\ProgramData\ScadaT4bun\LOGIN-ADMIN.txt`.
 4. Buka `http://localhost:8080` di PC ini. Alamat jaringan (misal `http://192.168.1.10:8080`) tampil di halaman Proyek dan bisa dibuka dari PC/tablet/HP lain di jaringan yang sama.
 
-Data (database, file, log) tersimpan di `C:\ProgramData\NusaHMI`. Ubah port atau password admin di `config.json`, lalu restart PC atau jalankan "Hentikan NusaHMI" → "Jalankan NusaHMI" dari Start Menu.
+Data (database, file, log) tersimpan di `C:\ProgramData\ScadaT4bun`. Ubah port atau password admin di `config.json`, lalu restart PC atau jalankan "Hentikan ScadaT4bun" → "Jalankan ScadaT4bun" dari Start Menu.
 
 ## Membuat installer (.exe)
-- **Otomatis (GitHub Actions):** push repo ke GitHub → tab *Actions* → *Build Windows Installer* → *Run workflow*. Unduh artefak `NusaHMI-Setup`.
+- **Otomatis (GitHub Actions):** push repo ke GitHub → tab *Actions* → *Build Windows Installer* → *Run workflow*. Unduh artefak `ScadaT4bun-Setup`.
 - **Manual di PC Windows:** pasang Node.js 20 + Yarn + Inno Setup 6, lalu:
   ```powershell
   powershell -ExecutionPolicy Bypass -File local\build_windows.ps1
   iscc local\installer.iss
   ```
-  Hasil: `local\Output\NusaHMI-Setup-1.0.0.exe`.
+  Hasil: `local\Output\ScadaT4bun-Setup-1.0.0.exe`.
 
 ## Menjalankan tanpa installer (Linux / uji coba)
 ```bash

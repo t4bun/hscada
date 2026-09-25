@@ -1,4 +1,4 @@
-"""NusaHMI local launcher: starts bundled MongoDB + backend (API + HMI web) on the factory LAN."""
+"""Scada by T4bun local launcher: starts bundled MongoDB + backend (API + HMI web) on the factory LAN."""
 import argparse
 import json
 import os
@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "backend" if (ROOT / "backend" / "server.py").exists() else ROOT.parent / "backend"
 FRONTEND = ROOT / "frontend" if (ROOT / "frontend" / "index.html").exists() else ROOT.parent / "frontend" / "build"
-DATA = Path(os.environ.get("NUSAHMI_DATA") or Path(os.environ.get("PROGRAMDATA") or Path.home()) / "NusaHMI")
+DATA = Path(os.environ.get("SCADA_DATA") or Path(os.environ.get("PROGRAMDATA") or Path.home()) / "ScadaT4bun")
 CONFIG, PIDS = DATA / "config.json", DATA / "pids.json"
 WIN = os.name == "nt"
 
@@ -25,14 +25,14 @@ def load_config():
     cfg = json.loads(CONFIG.read_text()) if CONFIG.exists() else {}
     cfg.setdefault("http_port", 8080)
     cfg.setdefault("mongo_port", 27027)
-    cfg.setdefault("db_name", "nusahmi_local")
+    cfg.setdefault("db_name", "scada_t4bun")
     cfg.setdefault("jwt_secret", secrets.token_hex(32))
-    cfg.setdefault("admin_email", "admin@nusahmi.local")
+    cfg.setdefault("admin_email", "admin@t4bun.local")
     cfg.setdefault("admin_password", secrets.token_urlsafe(9))
     CONFIG.write_text(json.dumps(cfg, indent=2))
     (DATA / "LOGIN-ADMIN.txt").write_text(
-        f"NusaHMI - Login Engineer\r\n\r\nAlamat : http://localhost:{cfg['http_port']}\r\nEmail  : {cfg['admin_email']}\r\n"
-        f"Sandi  : {cfg['admin_password']}\r\n\r\nUbah di {CONFIG} lalu restart PC / layanan NusaHMI.\r\n")
+        f"Scada by T4bun - Login Engineer\r\n\r\nAlamat : http://localhost:{cfg['http_port']}\r\nEmail  : {cfg['admin_email']}\r\n"
+        f"Sandi  : {cfg['admin_password']}\r\n\r\nUbah di {CONFIG} lalu restart PC / layanan ScadaT4bun.\r\n")
     return cfg
 
 
@@ -82,7 +82,7 @@ def start_mongo(cfg):
 
 def stop():
     if not PIDS.exists():
-        print("NusaHMI tidak berjalan.")
+        print("ScadaT4bun tidak berjalan.")
         return
     for pid in json.loads(PIDS.read_text()).values():
         if not pid:
@@ -95,11 +95,11 @@ def stop():
         except OSError:
             pass
     PIDS.unlink(missing_ok=True)
-    print("NusaHMI dihentikan.")
+    print("ScadaT4bun dihentikan.")
 
 
 def main():
-    ap = argparse.ArgumentParser(description="NusaHMI SCADA lokal")
+    ap = argparse.ArgumentParser(description="Scada by T4bun lokal")
     ap.add_argument("--service", action="store_true", help="mode layanan (tanpa membuka browser)")
     ap.add_argument("--init", action="store_true", help="buat konfigurasi awal lalu keluar")
     ap.add_argument("--stop", action="store_true", help="hentikan layanan yang berjalan")
@@ -130,10 +130,10 @@ def serve(cfg, url, service):
         "MONGO_URL": url, "DB_NAME": os.environ.get("DB_NAME") or cfg["db_name"], "JWT_SECRET": cfg["jwt_secret"],
         "ADMIN_EMAIL": cfg["admin_email"], "ADMIN_PASSWORD": cfg["admin_password"], "FRONTEND_URL": f"http://localhost:{http}",
         "APP_MODE": "local", "HTTP_PORT": str(http), "COOKIE_SECURE": "false", "STATIC_DIR": str(FRONTEND),
-        "LOCAL_STORAGE_DIR": str(DATA / "files"), "NUSAHMI_CONFIG": str(CONFIG), "NUSAHMI_DATA": str(DATA),
+        "LOCAL_STORAGE_DIR": str(DATA / "files"), "SCADA_CONFIG": str(CONFIG), "SCADA_DATA": str(DATA),
     })
     sfx = "" if http == 80 else f":{http}"
-    print("=" * 60 + "\n NusaHMI SCADA - Versi Lokal\n" + "=" * 60)
+    print("=" * 60 + "\n Scada by T4bun - Versi Lokal\n" + "=" * 60)
     print(f" Buka di PC ini   : http://localhost{sfx}")
     for ip in lan_ips():
         print(f" Dari jaringan    : http://{ip}{sfx}")

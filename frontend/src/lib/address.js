@@ -43,6 +43,7 @@ export function inferType(family, address) {
   if (family === "modbus") return /^(0\d{4,5}|1\d{4,5}|C\d+|DI\d+|M\d+)$/.test(a) || a.includes(".") ? "BOOL" : "INT16";
   if (family === "internal") return a.startsWith("LB") ? "BOOL" : "INT16";
   if (family === "opcua") return null;
+  if (family === "fins" || family === "hostlink") return a.includes(".") ? "BOOL" : "BCD16";
   if (family === "wecon" || family === "fatek") return /^[MXYSTC]\d+$/.test(a) || a.includes(".") ? "BOOL" : "INT16";
   return a.includes(".") ? "BOOL" : "INT16";
 }

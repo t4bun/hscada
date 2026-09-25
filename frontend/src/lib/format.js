@@ -5,6 +5,9 @@ export const TYPE_SPEC = {
   INT32: { digits: 10, signed: true, min: -2147483648, max: 2147483647, label: "INT32 (32-bit signed)" },
   UINT32: { digits: 10, signed: false, min: 0, max: 4294967295, label: "UINT32 (32-bit unsigned)" },
   FLOAT32: { digits: 7, signed: true, min: -3.4e38, max: 3.4e38, label: "FLOAT32 (32-bit real)" },
+  BCD16: { digits: 4, signed: false, min: 0, max: 9999, label: "BCD16 (4 digit, 0–9999)" },
+  BCD32: { digits: 8, signed: false, min: 0, max: 99999999, label: "BCD32 (8 digit, 0–99999999)" },
+  STRING: { digits: 0, signed: false, min: 0, max: 0, label: "STRING (ASCII, 1–256 karakter)" },
 };
 export const DATA_TYPES = Object.keys(TYPE_SPEC);
 export const defaultDecimals = (dt) => (dt === "FLOAT32" ? 2 : 0);
@@ -12,6 +15,7 @@ export const defaultDecimals = (dt) => (dt === "FLOAT32" ? 2 : 0);
 export function specFor(dt = "INT16", decimals = 0) {
   const s = TYPE_SPEC[dt] || TYPE_SPEC.INT16;
   if (dt === "BOOL") return { maxChars: 1, intDigits: 1, decimals: 0, min: 0, max: 1 };
+  if (dt === "STRING") return { maxChars: 256, intDigits: 0, decimals: 0, min: 0, max: 0 };
   const cap = dt === "FLOAT32" ? s.digits - 1 : s.digits;
   const dec = Math.max(0, Math.min(Number(decimals) || 0, cap));
   const intDigits = Math.max(1, s.digits - dec);
@@ -29,6 +33,7 @@ export function specFor(dt = "INT16", decimals = 0) {
 
 export function formatValue(v, dt = "INT16", decimals = 0) {
   if (v === undefined || v === null) return "----";
+  if (typeof v === "string") return v;
   if (dt === "BOOL" || typeof v === "boolean") return v ? "1" : "0";
   const sp = specFor(dt, decimals);
   const s = Number(v).toFixed(sp.decimals);

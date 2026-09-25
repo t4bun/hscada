@@ -15,7 +15,8 @@ from db import db
 router = APIRouter()
 MODE = os.environ.get("APP_MODE", "cloud")
 RUN_PORT = int(os.environ.get("HTTP_PORT", "8080"))
-DEFAULTS = {"hide_engineer": False, "engineer_path": "", "default_slug": "", "mdns_name": "", "custom_domain": "", "http_port": RUN_PORT}
+DEFAULTS = {"hide_engineer": False, "engineer_path": "", "default_slug": "", "mdns_name": "", "custom_domain": "", "http_port": RUN_PORT,
+            "workspace_name": "Scada by T4bun", "workspace_logo": ""}
 PATH_RE = re.compile(r"^[a-z0-9][a-z0-9-]{3,39}$")
 MDNS_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
 DOMAIN_RE = re.compile(r"^(?=.{3,253}$)[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
@@ -31,6 +32,8 @@ class SysIn(BaseModel):
     mdns_name: str = ""
     custom_domain: str = ""
     http_port: int = Field(8080, ge=1, le=65535)
+    workspace_name: str = Field("Scada by T4bun", min_length=1, max_length=60)
+    workspace_logo: str = ""
 
 
 async def get_sys() -> dict:
@@ -89,9 +92,9 @@ def apply_hosts(domain: str):
     if MODE != "local":
         return None
     try:
-        txt = re.sub(r"\n?# NusaHMI start.*?# NusaHMI end\n?", "\n", HOSTS.read_text(), flags=re.S).rstrip("\n") + "\n"
+        txt = re.sub(r"\n?# ScadaT4bun start.*?# ScadaT4bun end\n?", "\n", HOSTS.read_text(), flags=re.S).rstrip("\n") + "\n"
         if domain:
-            txt += f"# NusaHMI start\n127.0.0.1 {domain}\n# NusaHMI end\n"
+            txt += f"# ScadaT4bun start\n127.0.0.1 {domain}\n# ScadaT4bun end\n"
         HOSTS.write_text(txt)
         return f"File hosts PC ini diperbarui ({domain})" if domain else None
     except Exception as e:
@@ -99,7 +102,7 @@ def apply_hosts(domain: str):
 
 
 def save_local_config(s: dict):
-    cfg = os.environ.get("NUSAHMI_CONFIG")
+    cfg = os.environ.get("SCADA_CONFIG")
     if MODE != "local" or not cfg:
         return
     p = Path(cfg)
@@ -109,7 +112,7 @@ def save_local_config(s: dict):
     eng = f"/{s['engineer_path']}/projects" if s["hide_engineer"] else "/projects"
     (p.parent / "ENGINEER-URL.txt").write_text(f"Halaman engineer: http://localhost:{s['http_port']}{eng}\r\n")
     if os.name == "nt":
-        subprocess.run(["netsh", "advfirewall", "firewall", "add", "rule", f"name=NusaHMI-{s['http_port']}", "dir=in", "action=allow",
+        subprocess.run(["netsh", "advfirewall", "firewall", "add", "rule", f"name=ScadaT4bun-{s['http_port']}", "dir=in", "action=allow",
                         "protocol=TCP", f"localport={s['http_port']}"], capture_output=True)
 
 
@@ -126,7 +129,8 @@ async def boot(seg: str = ""):
     slug = s["default_slug"]
     if slug and not await db.projects.find_one({"publish_slug": slug, "published": True}, {"_id": 1}):
         slug = ""
-    return {"hide": hide, "engineer": (not hide) or seg == s["engineer_path"], "default_slug": slug}
+    return {"hide": hide, "engineer": (not hide) or seg == s["engineer_path"], "default_slug": slug,
+            "workspace_name": s["workspace_name"], "workspace_logo": s["workspace_logo"]}
 
 
 @router.get("/system/settings")
@@ -141,6 +145,7 @@ async def write_settings(body: SysIn, user=Depends(get_current_user)):
     s["engineer_path"] = s["engineer_path"].strip().strip("/").lower()
     s["mdns_name"] = s["mdns_name"].strip().lower().removesuffix(".local")
     s["custom_domain"] = s["custom_domain"].strip().lower()
+    s["workspace_name"] = s["workspace_name"].strip() or "Scada by T4bun"
     if s["hide_engineer"] and (not PATH_RE.match(s["engineer_path"]) or s["engineer_path"] in RESERVED):
         raise HTTPException(400, "Path engineer 4-40 karakter (huruf kecil, angka, '-') dan bukan kata sistem (view, api, login, ...)")
     if s["mdns_name"] and not MDNS_RE.match(s["mdns_name"]):

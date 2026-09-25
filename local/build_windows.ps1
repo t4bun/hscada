@@ -1,11 +1,11 @@
-# Build NusaHMI local package (dist\) for Windows 10/11 x64. Run on Windows with Node + Yarn installed.
+# Build ScadaT4bun local package (dist\) for Windows 10/11 x64. Run on Windows with Node + Yarn installed.
 $ErrorActionPreference = "Stop"
 $Local = $PSScriptRoot
 $Root = Split-Path -Parent $Local
 $Dist = Join-Path $Local "dist"
 $PyVer = "3.11.9"
 $MongoVer = "7.0.14"
-$Tmp = Join-Path $env:TEMP "nusahmi-build"
+$Tmp = Join-Path $env:TEMP "t4bun-build"
 
 Remove-Item $Dist, $Tmp -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $Dist, $Tmp | Out-Null

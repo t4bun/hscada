@@ -31,7 +31,7 @@ app = FastAPI()
 api = APIRouter(prefix="/api")
 engine = Engine(db)
 DEFAULT_SETTINGS = {"byte_order": "ABCD", "initial_screen": "", "screen_saver_enabled": False, "screen_saver_minutes": 5, "security_enabled": False,
-                    "record_retention_enabled": True, "record_retention_days": 90}
+                    "record_retention_enabled": True, "record_retention_days": 90, "alarm_retention_enabled": True, "alarm_retention_days": 90}
 
 
 def now_iso():
@@ -114,6 +114,7 @@ class TagIn(BaseModel):
     address: str
     data_type: str = "INT16"
     decimals: int = 0
+    length: int = Field(16, ge=1, le=256)
     unit: str = ""
     description: str = ""
     sim_mode: str = "sine"
@@ -201,7 +202,7 @@ async def owned_project(project_id: str, user: dict) -> dict:
     return p
 
 
-CATEGORY = {"BOOL": "Bit", "INT16": "Word", "UINT16": "Word", "INT32": "DWord", "UINT32": "DWord", "FLOAT32": "Float"}
+CATEGORY = {"BOOL": "Bit", "INT16": "Word", "UINT16": "Word", "INT32": "DWord", "UINT32": "DWord", "FLOAT32": "Float", "BCD16": "Word", "BCD32": "DWord", "STRING": "String"}
 
 
 def tag_out(t: dict) -> dict:

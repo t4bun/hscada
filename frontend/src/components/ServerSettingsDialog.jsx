@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Server, RefreshCw, Shuffle } from "lucide-react";
+import { Server, RefreshCw, Shuffle, ImageIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { api, errMsg } from "@/lib/api";
+import { api, errMsg, uploadFile, assetUrl } from "@/lib/api";
+import { useBrand } from "@/components/Brand";
 
 const inputCls = "w-full h-9 bg-[#0B0F17] border border-slate-700 rounded-sm px-2 text-sm text-slate-100 font-mono focus:outline-none focus:border-blue-500";
 const Lbl = ({ t, hint, children }) => (
@@ -16,10 +17,33 @@ const Lbl = ({ t, hint, children }) => (
 const rnd = () => `eng-${Math.random().toString(36).slice(2, 8)}`;
 const seg = () => window.location.pathname.split("/")[1] || "";
 
+const WorkspaceSection = ({ s, setS }) => {
+  const ref = useRef();
+  const pick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try { const up = await uploadFile(file); setS((x) => ({ ...x, workspace_logo: up.url })); } catch (er) { toast.error(errMsg(er)); }
+  };
+  return (
+    <section className="grid grid-cols-[64px_1fr] gap-4 items-center border border-slate-800 rounded-sm p-4" data-testid="workspace-section">
+      <button type="button" data-testid="workspace-logo-btn" title="Ganti logo" onClick={() => ref.current.click()} className="w-16 h-16 grid place-items-center bg-[#0B0F17] border border-dashed border-slate-600 hover:border-blue-500 rounded-sm overflow-hidden">
+        {s.workspace_logo ? <img src={assetUrl(s.workspace_logo)} alt="" className="w-full h-full object-contain" /> : <ImageIcon size={20} className="text-slate-500" />}
+      </button>
+      <div className="space-y-2">
+        <Lbl t="Nama Workspace"><input data-testid="workspace-name-input" className={inputCls} maxLength={60} value={s.workspace_name} onChange={(e) => setS({ ...s, workspace_name: e.target.value })} /></Lbl>
+        {s.workspace_logo && <button type="button" data-testid="workspace-logo-clear" onClick={() => setS({ ...s, workspace_logo: "" })} className="text-[11px] text-slate-400 hover:text-red-400">Hapus logo</button>}
+      </div>
+      <input ref={ref} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden onChange={pick} />
+    </section>
+  );
+};
+
 export const ServerSettingsDialog = ({ open, onOpenChange, projects }) => {
   const [s, setS] = useState(null);
   const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
+  const { setBrand } = useBrand();
   useEffect(() => { if (open) { setRes(null); api.get("/system/settings").then((r) => setS(r.data)).catch((e) => toast.error(errMsg(e))); } }, [open]);
   if (!s) return null;
   const set = (k) => (v) => setS({ ...s, [k]: v?.target ? v.target.value : v });
@@ -31,7 +55,8 @@ export const ServerSettingsDialog = ({ open, onOpenChange, projects }) => {
     try {
       const { data } = await api.put("/system/settings", { ...s, http_port: Number(s.http_port) });
       setRes(data);
-      toast.success("Pengaturan server disimpan");
+      setBrand({ workspace_name: data.workspace_name, workspace_logo: data.workspace_logo });
+      toast.success("Pengaturan disimpan");
       const want = data.hide_engineer ? data.engineer_path : "";
       const cur = seg() === "projects" ? "" : seg();
       if (!data.restart_required && want !== cur) {
@@ -53,10 +78,11 @@ export const ServerSettingsDialog = ({ open, onOpenChange, projects }) => {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-[#111827] border-slate-700 text-slate-100 max-w-2xl max-h-[92vh] overflow-y-auto" data-testid="server-settings-dialog">
         <DialogHeader>
-          <DialogTitle className="font-heading flex items-center gap-2"><Server size={18} />Pengaturan Server & Alamat Lokal</DialogTitle>
-          <DialogDescription className="text-slate-400">Atur alamat operator, halaman engineer rahasia, nama jaringan, dan port.</DialogDescription>
+          <DialogTitle className="font-heading flex items-center gap-2"><Server size={18} />Pengaturan Workspace &amp; Server</DialogTitle>
+          <DialogDescription className="text-slate-400">Atur nama &amp; logo workspace, alamat operator, halaman engineer rahasia, nama jaringan, dan port.</DialogDescription>
         </DialogHeader>
         {!local && <p data-testid="server-cloud-note" className="text-[11px] text-amber-200/90 bg-amber-500/5 border border-amber-500/30 p-2 rounded-sm">Mode cloud: nama .local, domain, dan port hanya berlaku di versi lokal (PC pabrik). Path engineer dan project default tetap berlaku.</p>}
+        <WorkspaceSection s={s} setS={setS} />
         <section className="space-y-3 border border-slate-800 rounded-sm p-4">
           <div className="flex items-center justify-between gap-4">
             <div><p className="text-sm">Sembunyikan Halaman Engineer</p><p className="text-xs text-slate-500">Operator yang membuka alamat utama langsung melihat runtime. Project manager hanya lewat path rahasia.</p></div>
@@ -102,7 +128,7 @@ export const ServerSettingsDialog = ({ open, onOpenChange, projects }) => {
             )}
           </div>
         )}
-        <button data-testid="server-save-btn" disabled={busy} onClick={save} className="h-10 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 rounded-sm text-sm font-semibold">{busy ? "Menyimpan..." : "Simpan Pengaturan Server"}</button>
+        <button data-testid="server-save-btn" disabled={busy} onClick={save} className="h-10 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 rounded-sm text-sm font-semibold">{busy ? "Menyimpan..." : "Simpan Pengaturan"}</button>
       </DialogContent>
     </Dialog>
   );

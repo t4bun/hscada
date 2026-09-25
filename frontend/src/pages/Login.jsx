@@ -1,3 +1,4 @@
+import { Brand } from "@/components/Brand";
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Activity, Cpu, Radio } from "lucide-react";
@@ -36,8 +37,7 @@ export default function Login() {
         <div className="absolute inset-0 hmi-dots opacity-40" />
         <div className="relative h-full flex flex-col justify-between p-12">
           <div className="flex items-center gap-2 text-slate-200">
-            <span className="w-8 h-8 bg-blue-600 grid place-items-center rounded-sm"><Activity size={17} /></span>
-            <span className="font-heading font-black tracking-tight text-lg">NUSA<span className="text-blue-400">HMI</span></span>
+            <Brand size="lg" />
           </div>
           <div className="max-w-lg space-y-6 hmi-rise">
             <h1 className="font-heading text-4xl sm:text-5xl font-black text-white leading-[1.05] tracking-tight">Rancang layar SCADA Anda. Deploy ke klien dalam satu klik.</h1>

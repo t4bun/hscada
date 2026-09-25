@@ -28,7 +28,7 @@ export const TagDialog = ({ open, onOpenChange, projectId, tag, preset, devices,
   const isBool = f.data_type === "BOOL";
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e?.target ? e.target.value : e }));
   const num = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value === "" ? null : Number(e.target.value) }));
-  const typePatch = (dt, s) => ({ data_type: dt, decimals: defaultDecimals(dt), sim_mode: dt === "BOOL" ? "static" : s.sim_mode === "toggle" || s.sim_mode === "static" ? "sine" : s.sim_mode });
+  const typePatch = (dt, s) => ({ data_type: dt, decimals: defaultDecimals(dt), sim_mode: dt === "BOOL" || dt === "STRING" ? "static" : s.sim_mode === "toggle" || s.sim_mode === "static" ? "sine" : s.sim_mode });
   const pickType = (e) => { touched.current = true; const dt = e.target.value; setF((s) => ({ ...s, ...typePatch(dt, s) })); };
   const setAddress = (e) => {
     const address = e.target.value;
@@ -65,8 +65,10 @@ export const TagDialog = ({ open, onOpenChange, projectId, tag, preset, devices,
                 {DATA_TYPES.map((d) => <option key={d} value={d}>{TYPE_SPEC[d].label}</option>)}
               </select>
             </L>
-            <L label="Titik Desimal">
-              <input data-testid="tag-decimals-input" type="number" min={0} disabled={isBool} className={inputCls} value={f.decimals} onChange={(e) => setF({ ...f, decimals: Number(e.target.value) })} />
+            <L label={f.data_type === "STRING" ? "Panjang (karakter)" : "Titik Desimal"}>
+              {f.data_type === "STRING"
+                ? <input data-testid="tag-length-input" type="number" min={1} max={256} className={inputCls} value={f.length ?? 16} onChange={(e) => setF({ ...f, length: Math.min(256, Math.max(1, Number(e.target.value) || 1)) })} />
+                : <input data-testid="tag-decimals-input" type="number" min={0} disabled={isBool} className={inputCls} value={f.decimals} onChange={(e) => setF({ ...f, decimals: Number(e.target.value) })} />}
             </L>
             <div className="col-span-2 grid grid-cols-3 gap-2 text-xs font-mono" data-testid="tag-auto-format">
               <div className="bg-[#0B0F17] border border-slate-800 p-2 rounded-sm"><p className="text-[10px] text-slate-500">MAKS. KARAKTER (AUTO)</p><p className="text-emerald-400 text-lg font-bold" data-testid="tag-max-chars">{sp.maxChars}</p></div>

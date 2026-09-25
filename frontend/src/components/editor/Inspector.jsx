@@ -139,7 +139,7 @@ const Field = ({ f, value, set, ctx, widget }) => {
     case "states": return <StatesEditor value={value || []} set={set} bit={f.bit || (f.bitKey && widget.props[f.bitKey] !== "word")} />;
     case "charinfo": {
       const t = ctx.tags.find((x) => x.id === widget.props.tag);
-      const n = { BOOL: 1, INT16: 2, UINT16: 2, INT32: 4, UINT32: 4, FLOAT32: 4 }[t?.data_type] || 2;
+      const n = t?.data_type === "STRING" ? t.length || 16 : { BOOL: 1, INT16: 2, UINT16: 2, INT32: 4, UINT32: 4, FLOAT32: 4, BCD16: 2, BCD32: 4 }[t?.data_type] || 2;
       return <p data-testid="char-len-info" className="text-[11px] font-mono bg-slate-800/70 px-2 py-1.5 rounded-sm text-slate-400">Auto: <b className="text-emerald-400">{n} karakter</b> ({t ? t.data_type : "16-bit default"}, 2 karakter / word)</p>;
     }
     case "tags": return (
@@ -162,9 +162,15 @@ const Field = ({ f, value, set, ctx, widget }) => {
     );
     case "image": return <ImagePick value={value} onChange={set} testid={id} />;
     case "datatype": return (
-      <select data-testid={id} className={inputCls} value={value} onChange={(e) => set(e.target.value, { decimals: defaultDecimals(e.target.value) })}>
-        {DATA_TYPES.map((d) => <option key={d} value={d}>{TYPE_SPEC[d].label}</option>)}
+      <select data-testid={id} className={inputCls} value={value} onChange={(e) => {
+        const dt = e.target.value, dec = defaultDecimals(dt), sp = specFor(dt, dec);
+        set(dt, { decimals: dec, ...("min" in widget.props ? { min: sp.min, max: sp.max } : {}) });
+      }}>
+        {DATA_TYPES.filter((d) => d !== "STRING").map((d) => <option key={d} value={d}>{TYPE_SPEC[d].label}</option>)}
       </select>
+    );
+    case "maxchars": return (
+      <input data-testid={id} type="number" min={1} max={256} className={inputCls} value={value ?? 1} onChange={(e) => set(Math.min(256, Math.max(1, Number(e.target.value) || 1)))} />
     );
     case "decimals": {
       const sp = specFor(widget.props.data_type, value);

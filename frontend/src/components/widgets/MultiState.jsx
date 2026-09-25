@@ -125,6 +125,7 @@ export const CharDisplay = ({ p }) => {
   const v = values[p.tag];
   let text = "";
   if (p.mode === "message") text = pickState(p.states, v, false).text;
+  else if (typeof v === "string") text = v;
   else if (v !== undefined) {
     const size = CHAR_LEN[tagMap[p.tag]?.data_type] || 2;
     let n = Math.round(Number(v));
@@ -137,7 +138,7 @@ export const CharDisplay = ({ p }) => {
   return (
     <div className="w-full h-full flex flex-col justify-center px-2 border border-slate-700/80 rounded-[3px] overflow-hidden" style={{ background: p.bg }}>
       {p.label && <span className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase leading-tight">{p.label}</span>}
-      <span data-testid="hmi-char-display" className="whitespace-nowrap overflow-hidden" style={{ fontFamily: p.font_family, fontSize: p.font_size, color: p.color, textAlign: p.align }}>{text || "\u00A0"}</span>
+      <span data-testid="hmi-char-display" className="whitespace-nowrap overflow-hidden" style={{ fontFamily: p.font_family, fontSize: p.font_size, color: p.color, textAlign: p.align }}>{text.slice(0, Math.min(256, Math.max(1, Number(p.max_chars) || 256))) || "\u00A0"}</span>
     </div>
   );
 };

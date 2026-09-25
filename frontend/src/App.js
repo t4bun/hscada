@@ -2,6 +2,7 @@ import "@/App.css";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { api } from "@/lib/api";
+import { BrandContext, DEFAULT_BRAND } from "@/components/Brand";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, Protected } from "@/context/AuthContext";
 import Login from "@/pages/Login";
@@ -34,12 +35,18 @@ const NoApp = () => (
 
 function App() {
   const [boot, setBoot] = useState(null);
+  const [brand, setBrand] = useState(DEFAULT_BRAND);
   useEffect(() => {
-    api.get("/boot", { params: { seg: seg() } }).then((r) => setBoot(r.data)).catch(() => setBoot({ hide: false, engineer: true }));
+    api.get("/boot", { params: { seg: seg() } }).then((r) => {
+      setBoot(r.data);
+      setBrand({ workspace_name: r.data.workspace_name || DEFAULT_BRAND.workspace_name, workspace_logo: r.data.workspace_logo || "" });
+    }).catch(() => setBoot({ hide: false, engineer: true }));
   }, []);
+  useEffect(() => { document.title = brand.workspace_name; }, [brand]);
   if (!boot) return <div className="min-h-screen bg-[#0B0F17]" />;
   const operator = boot.hide && !boot.engineer;
   return (
+    <BrandContext.Provider value={{ brand, setBrand }}>
     <BrowserRouter basename={boot.hide && boot.engineer ? `/${seg()}` : undefined}>
       {operator ? (
         <Routes>
@@ -49,6 +56,7 @@ function App() {
       ) : <EngineerRoutes />}
       <Toaster theme="dark" position="bottom-right" richColors />
     </BrowserRouter>
+    </BrandContext.Provider>
   );
 }
 

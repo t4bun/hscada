@@ -2,7 +2,7 @@ import re
 import socket
 import struct
 
-from drivers import PROTOCOLS, TYPE_SIZE, PlcError, decode_bytes, encode_bytes
+from drivers import PROTOCOLS, TYPE_SIZE, PlcError, decode_bytes, encode_bytes, text_from
 
 
 def dev_timeout(dev) -> float:
@@ -130,6 +130,10 @@ class HostLinkDriver:
             return bool((struct.unpack(">H", data[:2])[0] >> (p["bit"] or 0)) & 1)
         return decode_bytes(dtype, data, self.order)
 
+    def read_string(self, address, n):
+        self.connect()
+        return text_from(self._words(parse_hostlink(address), (n + 1) // 2), n)
+
     def write(self, address, dtype, value):
         self.connect()
         p = parse_hostlink(address)
@@ -194,6 +198,13 @@ class FatekDriver:
             return bool((struct.unpack(">H", data[:2])[0] >> (p["bit"] or 0)) & 1)
         return decode_bytes(dtype, data, self.order)
 
+    def read_string(self, address, n):
+        self.connect()
+        p = parse_fatek(address)
+        if p["kind"] != "reg":
+            raise PlcError("STRING harus di register R/D")
+        return text_from(self._regs(p, (n + 1) // 2), n)
+
     def write(self, address, dtype, value):
         self.connect()
         p = parse_fatek(address)
@@ -244,7 +255,7 @@ def parse_opcua(address: str):
     return opc_node_id(address)
 
 
-UA_TYPES = {"BOOL": "Boolean", "INT16": "Int16", "UINT16": "UInt16", "INT32": "Int32", "UINT32": "UInt32", "FLOAT32": "Float"}
+UA_TYPES = {"BOOL": "Boolean", "INT16": "Int16", "UINT16": "UInt16", "INT32": "Int32", "UINT32": "UInt32", "FLOAT32": "Float", "BCD16": "UInt16", "BCD32": "UInt32"}
 
 
 class OpcUaDriver:
@@ -289,6 +300,9 @@ class OpcUaDriver:
         except ua.UaStatusCodeError as e:
             raise PlcError(str(e))
         return bool(v) if dtype == "BOOL" else v
+
+    def read_string(self, address, n):
+        return str(self.read(address, "STRING"))[:n]
 
     def write(self, address, dtype, value):
         from asyncua import ua

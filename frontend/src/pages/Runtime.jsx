@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Maximize, Minimize, BellRing, Wifi, WifiOff, MonitorPlay, X } from "lucide-react";
+import { Maximize, Minimize, BellRing, Wifi, WifiOff, MonitorPlay, X, Download } from "lucide-react";
 import { api, errMsg, setClientToken } from "@/lib/api";
 import { RtContext, useLive, useFonts, useRecords } from "@/hooks/useLive";
 import { PdfDialog } from "@/components/runtime/PdfDialog";
@@ -82,6 +82,8 @@ export default function Runtime({ mode, slugOverride }) {
   const [subId, setSubId] = useState(null);
   const [fs, setFs] = useState(false);
   const [pdf, setPdf] = useState(null);
+  const [kiosk, setKiosk] = useState(() => new URLSearchParams(window.location.search).get("kiosk") === "1" || window.matchMedia?.("(display-mode: fullscreen), (display-mode: standalone)").matches);
+  const [installEvt, setInstallEvt] = useState(null);
   const seen = useRef(new Set());
   const base = mode === "public" ? `/public/${slug}/rt` : `/projects/${id}/rt`;
 
@@ -161,8 +163,26 @@ export default function Runtime({ mode, slugOverride }) {
   useEffect(() => {
     const on = () => setFs(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", on);
-    return () => document.removeEventListener("fullscreenchange", on);
-  }, []);
+    const inst = (e) => { e.preventDefault(); setInstallEvt(e); };
+    window.addEventListener("beforeinstallprompt", inst);
+    let first;
+    if (kiosk) {
+      first = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); };
+      window.addEventListener("pointerdown", first);
+    }
+    return () => {
+      document.removeEventListener("fullscreenchange", on);
+      window.removeEventListener("beforeinstallprompt", inst);
+      if (first) window.removeEventListener("pointerdown", first);
+    };
+  }, [kiosk]);
+  const enterKiosk = () => {
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    const u = new URL(window.location.href);
+    u.searchParams.set("kiosk", "1");
+    window.history.replaceState(null, "", u.toString());
+    setKiosk(true);
+  };
 
   const loginOk = (token) => { localStorage.setItem(tokenKey, token); load(); };
   const logout = () => { localStorage.removeItem(tokenKey); setClientToken(null); load(); };
@@ -179,14 +199,14 @@ export default function Runtime({ mode, slugOverride }) {
 
   return (
     <RtContext.Provider value={rt}>
-      <div className="w-screen h-screen bg-[#05070B] overflow-hidden relative grid place-items-center" data-testid="runtime-viewer">
+      <div className={`w-screen h-screen bg-[#05070B] overflow-hidden relative grid place-items-center ${kiosk ? "select-none" : ""}`} data-testid="runtime-viewer" data-kiosk={kiosk ? "true" : "false"} onContextMenu={kiosk ? (e) => e.preventDefault() : undefined}>
         <div style={{ width: app.width * scale, height: app.height * scale }}>
           <div className="origin-top-left relative" style={{ transform: `scale(${scale})`, width: app.width, height: app.height }}>
             <ScreenView screen={screen} width={app.width} height={app.height} />
             {sub && <Subscreen screen={sub} onClose={() => setSubId(null)} />}
           </div>
         </div>
-        <div className="fixed top-2 right-2 flex items-center gap-1 bg-slate-900/70 backdrop-blur-md border border-slate-700/60 rounded-sm px-1.5 py-1 opacity-50 hover:opacity-100 transition-opacity z-30" data-testid="runtime-toolbar">
+        <div className={`fixed top-2 right-2 flex items-center gap-1 bg-slate-900/70 backdrop-blur-md border border-slate-700/60 rounded-sm px-1.5 py-1 ${kiosk ? "opacity-0" : "opacity-50"} hover:opacity-100 transition-opacity z-30`} data-testid="runtime-toolbar">
           {mode === "preview" && <span className="text-[10px] font-mono text-amber-400 px-1">PREVIEW</span>}
           {!rt.allowOperate && <span className="text-[10px] font-mono text-slate-400 px-1" data-testid="runtime-readonly-badge">READ-ONLY</span>}
           <select data-testid="runtime-screen-select" value={screen.id} onChange={(e) => nav.openScreen(e.target.value)} className="bg-transparent text-xs text-slate-200 outline-none">
@@ -195,6 +215,10 @@ export default function Runtime({ mode, slugOverride }) {
           <span data-testid="runtime-alarm-count" className={`flex items-center gap-1 text-[11px] font-mono px-1 ${live.snap.active_alarms ? "text-red-400 animate-pulse" : "text-slate-500"}`}><BellRing size={13} />{live.snap.active_alarms || 0}</span>
           <span data-testid="runtime-conn" className={live.online ? "text-emerald-400 px-1" : "text-red-400 px-1"}>{live.online ? <Wifi size={14} /> : <WifiOff size={14} />}</span>
           {session && <UserMenu slug={slug} session={session} onLogout={logout} />}
+          {installEvt && (
+            <button data-testid="runtime-install-btn" title="Install sebagai aplikasi" onClick={() => { installEvt.prompt(); setInstallEvt(null); }} className="text-emerald-300 hover:text-white px-1"><Download size={14} /></button>
+          )}
+          {!kiosk && <button data-testid="runtime-kiosk-btn" title="Mode Kiosk (full-screen)" onClick={enterKiosk} className="text-slate-300 hover:text-white px-1"><MonitorPlay size={14} /></button>}
           <button data-testid="runtime-fullscreen-btn" onClick={() => (fs ? document.exitFullscreen() : document.documentElement.requestFullscreen())} className="text-slate-300 hover:text-white px-1">
             {fs ? <Minimize size={14} /> : <Maximize size={14} />}
           </button>
