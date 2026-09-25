@@ -1,0 +1,35 @@
+{
+  "summary": "First-run E2E test of SCADA HMI Builder. Backend: 24/25 pytest passing (auth, meta, projects CRUD, ownership isolation, devices for S7/Omron/Modbus, invalid address rejection, offline detection, tag format max_chars for INT16/UINT16/INT32/UINT32 & decimals recompute, runtime values/history/alarms, publish + public runtime, read-only 403, uploads good+bad). Frontend: login OK, projects list, config page shows PLC + 8 live tags with updating values, editor loads with 18 palette items and save/publish/add-screen controls, public /view/<slug> runtime renders live gauges, tank, pump toggle, setpoint, trend, active alarm; LAPORAN sub-screen renders 30-min history trend, CSV data record, alarm history with ACK.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/projects/{id}/tags (FLOAT32 max_chars)", "issue": "FLOAT32 with decimals=2 returns max_chars=9 (sign+5int+dot+2dec), but review spec requested 8. Formula in backend/formats.py: int_digits = digits(7) - dec(2) = 5 -> 5+2+1(dot)+1(sign)=9. Spec likely wanted int_digits capped so integer part = digits(7) - dec(2) - 1(dot) = 4, giving 8. Decide whether digits budget should include the decimal point."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Editor/Runtime charts", "issues": ["Recharts warning 'width(-1) and height(-1) of chart should be greater than 0' on initial mount before container has size; add minWidth/minHeight or defer render until measured."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Decide on FLOAT32 max_chars policy: current backend returns 9 for FLOAT32 dec=2; problem statement expected 8. Adjust spec_for() in backend/formats.py (subtract 1 from digits when a decimal point is present) if 8 is desired, and update UI expectations."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 541 lines with many concerns (auth, projects, devices, tags, runtime, uploads) - consider splitting into routers/{auth,projects,devices,tags,runtime,uploads}.py for maintainability.",
+    "auth.py hash uses bcrypt (starts with $2b$) - good. httpOnly Secure SameSite=None cookies set correctly. Login lockout after 5 attempts implemented. seed_admin idempotent and updates password if changed - matches playbook.",
+    "CORS uses explicit FRONTEND_URL + http://localhost:3000 with allow_credentials=True - correct.",
+    "Login attempts collection lacks TTL index; identifier records will grow indefinitely - consider TTL on locked_until or last_attempt_at.",
+    "engine.py auto-restart on load_config: creating many devices could trigger frequent full reloads; acceptable for MVP.",
+    "make_rt_router mounts twice for private/public - public write correctly gated by allow_operate; verified with 403 test."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "96% (24/25)", "frontend": "100% of tested flows"},
+  "test_credentials": "admin@scada.id / admin123 (verified working).",
+  "seed_data_creation": "Test users prefixed TEST_ auto-cleaned in fixtures; a temp test project TEST_isolate and TEST_proj get created and deleted. Register creates user + demo project (persists in db).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite at /app/backend/tests/backend_test.py (pytest, uses REACT_APP_BACKEND_URL). Admin login + seeded 'Demo Pengolahan Air' with slug jmn2xhqzzti already published. Simulator engine runs; history/alarms populated within seconds. Real driver connections cannot succeed in cloud - only simulator mode. FLOAT32 max_chars policy discrepancy is the only unresolved item."
+}

@@ -27,7 +27,7 @@ const Frame = ({ title, right, children }) => (
 );
 
 const Chart = ({ data, tags, tagMap, yMin, yMax }) => (
-  <ResponsiveContainer width="100%" height="100%">
+  <ResponsiveContainer width="100%" height="100%" minWidth={50} minHeight={50}>
     <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
       <CartesianGrid stroke="#1E293B" strokeDasharray="3 3" />
       <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} tickFormatter={hhmmss} stroke="#475569" fontSize={10} tick={{ fill: "#64748B" }} />
