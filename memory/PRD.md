@@ -49,7 +49,11 @@ Extra: import photo, shape, font; widgets gauge, bar, history trend, chart trend
 - Local packaging: local/launcher.py (bundled mongod + uvicorn serving API + SPA on :8080, COOKIE_SECURE=false, local disk file storage), installer.iss (Inno Setup: firewall, autostart task, shortcuts), build_windows.ps1, GitHub Actions workflow .github/workflows/windows-installer.yml
 - Virtual PLC simulators: backend/tests/virtual_plcs.py (Modbus, Fatek, FINS UDP, S7, OPC UA, Host Link pty)
 
+## Implemented — Iteration 5: Data Cleanup (2026-06)
+- Project setting "Penyimpanan Data Record": auto-delete record samples older than N days (1–3650, default 90, on by default), engine runs cleanup hourly
+- Storage stats (samples, est. size, oldest/newest, last cleanup) + "Bersihkan Sekarang" button; global 90-day TTL index replaced by per-project retention
+
 ## Backlog
-- Fase 2: backup/restore project to file, export/import project between PCs, auto cleanup of old data records, raw-frame communication log page
+- Fase 2: backup/restore project to file, export/import project between PCs, raw-frame communication log page
 - Fase 3: Edge Gateway hybrid (cloud app + local agent with offline buffer), remote runtime access
 - P2: Scripts/expressions on tags, recipe management, WebSocket push

@@ -1,0 +1,20 @@
+{
+  "summary": "Iteration 5 — validated new 'Data Cleanup / record retention' feature (backend + frontend). Backend pytest: 8/8 pass (100%). Verified GET /api/projects/{pid}/records/storage returns full shape {samples,oldest,newest,est_bytes,enabled,days,last_cleanup}; POST cleanup deletes only samples older than settings.record_retention_days and only for that project (scope isolation confirmed by inserting foreign-project doc that survived); cleanup returns {deleted,days} and persists project.record_cleanup {at,deleted,cutoff}; returns 400 when record_retention_enabled=false; default settings on new project = record_retention_enabled=true, days=90; PUT /projects/{pid} settings persists via GET; storage & cleanup return 404 for non-owner project; old TTL index 'rs_ttl' on record_samples is absent (dropped in startup). Engine.cleanup_records path importable and referenced from records.cleanup_all. Frontend: on Demo Pengolahan Air > Pengaturan tab, retention-card renders with all required data-testids (settings-retention-switch, settings-retention-days, retention-samples/size/oldest/newest, retention-last-cleanup, retention-clean-now-btn, settings-save-btn). Toggling switch OFF hides both days input and clean-now button; toggling ON restores them. Days input clamps 9999->3650 and 0->1 as spec'd. Clean Now button confirms then triggers cleanup, toast 'N sampel lama dihapus' displayed, stats refresh (jumlah sampel updated 889->894 during test), last_cleanup line updates 'Pembersihan terakhir <ts> · N sampel dihapus'. settings-save-btn shows 'Pengaturan disimpan' toast.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/iteration5_test.py", "/app/test_reports/pytest/iteration5_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "records.retention() silently coerces settings.record_retention_days=0 or negative to 1 via max(1,int(...)) — fine, but frontend already clamps too; consider making backend also reject values outside 1..3650 with 400 for API-only callers who bypass the UI.",
+    "engine.run schedules cleanup at tick%3600==60; if the engine loop skips a tick due to a long step (>1s), the cleanup can be missed for that hour. Consider tracking 'last_cleanup_at' and running whenever now - last >= 3600s to be resilient to drift.",
+    "cleanup_project always writes project.record_cleanup even when deleted=0 — fine, but the hourly engine-driven cleanup will overwrite the timestamp of a manual cleanup with 0 deletions on the next hour. Acceptable UX-wise (shows 'last check ran'), just documenting."
+  ],
+  "updated_files": ["/app/backend/tests/iteration5_test.py (new)"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (all spec'd data-testids and interactions verified)"},
+  "test_credentials": "amoskun99@gmail.com / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Tests create disposable project 'TEST_retention_*' via API and insert record_samples directly in MongoDB with backdated ts (200d/40d/5d/1h). Project + samples are deleted in module fixture teardown. Demo project 'Demo Pengolahan Air' was NOT modified destructively; only clicked Clean Now with days=90 which deleted 0 samples (demo has ~890 recent samples, all <1d old). Demo settings left at record_retention_enabled=true, record_retention_days=90 as before.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run iteration5_test.py with: REACT_APP_BACKEND_URL=<public> MONGO_URL=... DB_NAME=test_database pytest backend/tests/iteration5_test.py -v -n 0. It uses pymongo directly to seed backdated record_samples. Auto-restores retention on the test project between subtests. Demo project id in this env: 85e6f6dc-e7cf-4fd4-a955-dff637f9bfea.",
+  "rca of the issue": "No bugs found in this iteration."
+}
