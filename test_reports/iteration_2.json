@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration-2 regression: 24/24 new backend pytests PASSED covering new protocols (modbus_rtu, modbus_rtu_tcp, internal LB/LW), address auto-infer (S7/Modbus/internal), TIA CSV import (Bool/Int/DInt/Real + skip String) with correct category (Bit/Word/DWord/Float), CSV export, project settings persistence (byte_order/initial_screen/screen_saver/security), builder security CRUD (groups + client users), and published-app client auth (requires_login, admin login, wrong password 401, viewer read-only 403 on write/ack/users). Frontend: builder config page renders Devices/Library/Security/Settings tabs correctly (library shows address map with map-add-N +Tag buttons, tag tree grouped Bit/Word/DWord/Float with search, Import + Export CSV buttons; security shows 4 default groups editable with operate/ack/manage-users + screen access and users manager; settings has byteorder, initial-screen, screensaver switch, security switch + save). Editor palette shows all iteration-2 widgets: bit_button, word_button, bit_lamp, word_lamp, func_button, sym_pump/valve/motor/conveyor/fan, char_display; palette groups DASAR / TOMBOL & LAMPU / KONTROL / SIMBOL INDUSTRI render (uppercase). Bit Button inspector shows Tipe Bit (Switch/Set ON/Set OFF/Momentary), momentary ms field, BENTUK (shape), STATE editor, states-editor testid. screen-type-select is present in screen props. Ctrl+G triggers 'widget digrupkan' toast. Runtime (/view/ghdhbuxrp4e): client-login gate works; admin/admin123 logs in; runtime-user-menu opens with menu-change-password, menu-manage-users, menu-logout; DETAIL func button opens subscreen-overlay containing 'START 1.5s' momentary button and TUTUP + X close controls; LAPORAN button renders. Backend endpoints /api/public/{slug} returns requires_login without X-Client-Token when security_enabled, and /rt/values returns 401 without token.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ProjectConfig (LibraryPanel) & Inspector (WidgetProps)", "issues": ["React hydration warning in console: '<span> cannot be a child of <option>'. Source: emergent visual-edit devtool wrappers (x-ve-dynamic <span style=display:contents>) rendered inside <option>. Browsers strip the span leading to hydration mismatch. Consider excluding <option> from visual-edit instrumentation or emitting the label text directly."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/iteration2_test.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iteration2.xml"
+  ],
+  "action_items": [
+    "Optional: suppress or fix the <option><span> hydration warning coming from the visual-edit instrumentation (LibraryPanel line 48, Inspector line 100)."
+  ],
+  "critical_code_review_comments": [
+    "security.py: client login_attempts identifier includes username in the record without $inc bound; a 6th attempt keeps returning 429 for 15 minutes even after a correct login isn't attempted — acceptable for MVP but consider TTL index on locked_until.",
+    "security.py ensure_default_groups seeds a client admin 'admin/admin123'. Password only initialised on first call — if the builder later changes it, seed won't overwrite. Good.",
+    "server.py public_app returns full screens+tags after client login; screens contain no per-widget access filtering — screen restriction is enforced client-side via group.screens. Backend still exposes all screen data. Verify frontend blocks nav (this test only exercised backend gating on write/ack/users).",
+    "drivers.py infer_type for modbus: '.bit' suffix -> BOOL (verified). For internal family, LB->BOOL, LW->INT16 (verified). No handling for LF (float) or LD (dword) — not required by spec.",
+    "tag_import.py silently maps 'Time' to INT32 and 'Word/Byte/USInt' to UINT16 — accepted per playbook. String rows skipped with reason (verified).",
+    "server.py is now 618 lines and combines projects/devices/tags/rt/uploads/publish/import — still recommended to split into routers/. (Same as iteration 1.)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/iteration2_test.py (new)"
+  ],
+  "success_rate": {"backend": "100% (24/24 iteration-2)", "frontend": "100% of tested flows"},
+  "test_credentials": "Builder amoskun99@gmail.com/admin123, Client admin/admin123 on slug ghdhbuxrp4e (both verified working).",
+  "seed_data_creation": "Tests create TEST_-prefixed devices, tags, groups and client users and delete them in teardown. No permanent state changes beyond the demo project.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration-2 backend suite at /app/backend/tests/iteration2_test.py. Uses ADMIN_EMAIL=amoskun99@gmail.com and slug DEMO_SLUG=ghdhbuxrp4e. Multi-select via shift+click on canvas widgets could not be reliably reproduced via Playwright pointer events (widgets may need pointer/mouse-down instead of click for the marquee/multi-select handler in Canvas.jsx); confirm via manual test if needed. Backend rt/values snapshot returns dict of tag values keyed by tag id (not nested under 'values'). One console hydration warning about <span> in <option> from visual-edit devtool wrappers observed on multiple pages."
+}

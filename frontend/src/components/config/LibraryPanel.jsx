@@ -45,7 +45,7 @@ export const LibraryPanel = ({ projectId, devices, tags, protocols, onReload, on
         <div><p className="text-[10px] font-bold uppercase tracking-[0.25em] text-blue-400">Address Library</p><h2 className="font-heading text-2xl font-bold mt-1">Mapping & Library Alamat</h2></div>
         <div className="flex flex-wrap gap-2 items-center">
           <select data-testid="library-device-select" className={sel} value={devId} onChange={(e) => setDevId(e.target.value)}>
-            {devices.map((d) => <option key={d.id} value={d.id}>{d.name} · {protocols[d.protocol]?.label}</option>)}
+            {devices.map((d) => <option key={d.id} value={d.id}>{`${d.name} · ${protocols[d.protocol]?.label || ""}`}</option>)}
           </select>
           <button data-testid="library-import-btn" disabled={!devId} onClick={() => fileRef.current.click()} className="h-9 px-3 flex items-center gap-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 rounded-sm disabled:opacity-40"><Upload size={14} />Import Tag (TIA Portal .xlsx / CSV)</button>
           <button data-testid="library-export-btn" onClick={doExport} className="h-9 px-3 flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 rounded-sm"><Download size={14} />Export CSV</button>

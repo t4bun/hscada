@@ -23,6 +23,17 @@ Extra: import photo, shape, font; widgets gauge, bar, history trend, chart trend
 - HMI editor: 18 widgets (label, rect, circle, line/pipe with flow animation, image, button, switch, lamp, numeric, setpoint input, slider, gauge, bar, tank, realtime trend, history trend, alarm record, data record w/ CSV), drag/resize/snap/grid/zoom, undo/redo, copy/paste/duplicate, z-order, multi-screen with goto navigation, image upload, custom font import, live values in editor
 - Publish dialog (snapshot, allow operate toggle, URL copy, unpublish), public runtime with auto scaling, fullscreen, screen switcher, alarm counter, read-only mode
 
+## Implemented — Iteration 2 (2026-06)
+- Industrial symbols (pump, valve, motor, conveyor, fan) with bit/word multi-state colors + animation
+- Bit/Word Button, Bit/Word Lamp with 6 button shapes / 5 lamp shapes, multi-state editor (value, text, bg, text color, blink); bit modes Set ON/Set OFF/Momentary (ms pulse, 0 = hold)/Switch; word modes set value/inc/dec/cycle; optional monitor tag
+- Character Display (ASCII from word, auto 2 chars/word, or message per value); Numeric Display
+- Function Button: Open Screen, Open Subscreen (popup screens w/ own size), Previous, Next, Close Subscreen
+- Editor multi-select (shift+click, marquee, Ctrl+A), align/distribute, same width/height/size from last-selected, group/ungroup (Ctrl+G), multi move/duplicate/delete
+- Client security: per-project groups (level, operate, ack, manage users, screen access) + users; runtime login gate, change own password, manage lower-level users; widget min security level
+- Address library: per-protocol address map + quick add, tag tree by Bit/Word/DWord/Float, auto data type from address, TIA Portal (.xlsx/.csv) import, CSV export; SCADA internal memory LB/LW (persisted)
+- Project settings: byte order (ABCD/CDAB/BADC/DCBA, per-device override), initial screen, screen saver; Modbus RTU RS485 serial + RTU over TCP
+- Builder admin: amoskun99@gmail.com
+
 ## Backlog
 - P1: User/operator login for published apps (roles), edge gateway agent for LAN PLCs behind NAT
 - P1: Group select / align tools, widget templates/symbol library (pumps, valves, motors)

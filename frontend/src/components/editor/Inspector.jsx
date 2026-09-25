@@ -97,7 +97,7 @@ const Field = ({ f, value, set, ctx, widget }) => {
           <option value="">— tanpa tag —</option>
           {cats.map((c) => {
             const list = ctx.tags.filter((t) => (t.category || "Word") === c);
-            return list.length ? <optgroup key={c} label={`${c} (${list.length})`}>{list.map((t) => <option key={t.id} value={t.id}>{t.name} · {t.address}</option>)}</optgroup> : null;
+            return list.length ? <optgroup key={c} label={`${c} (${list.length})`}>{list.map((t) => <option key={t.id} value={t.id}>{`${t.name} · ${t.address}`}</option>)}</optgroup> : null;
           })}
         </select>
       );

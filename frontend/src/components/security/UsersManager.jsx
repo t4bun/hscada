@@ -15,7 +15,7 @@ const Editor = ({ init, groups, onSave, onCancel, isNew }) => {
       <td className="p-1"><input data-testid="user-form-fullname" className={inputCls} value={f.full_name} onChange={set("full_name")} placeholder="nama" /></td>
       <td className="p-1">
         <select data-testid="user-form-group" className={inputCls} value={f.group_id} onChange={set("group_id")}>
-          {groups.map((g) => <option key={g.id} value={g.id}>{g.name} (L{g.level})</option>)}
+          {groups.map((g) => <option key={g.id} value={g.id}>{`${g.name} (L${g.level})`}</option>)}
         </select>
       </td>
       <td className="p-1"><input data-testid="user-form-password" type="password" className={inputCls} value={f.password} onChange={set("password")} placeholder={isNew ? "password" : "kosong = tetap"} /></td>
