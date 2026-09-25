@@ -1,0 +1,23 @@
+{
+  "summary": "Iteration 7 — frontend-only UI/integration testing of AddrBinding (direct address auto-tag creation + separate read address), Function Button appearance/shape/transparent/min_press_ms, and runtime export dialogs. All 4 spec scenarios PASSED end-to-end on Demo Pengolahan Air project. State fully restored at the end (bit button re-bound to Pompa_Run via Tag Library; test widgets + auto tags + uploaded shape removed).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AddrBinding.jsx: Direct mode input applies onBlur AND onKeyDown=Enter, plus device/type change auto-applies. This can trigger multiple /tags/ensure calls if user types then changes device. Non-blocking; consider debouncing or a single explicit 'Apply' step.",
+    "AddrBinding.jsx bound-text uses ctx.tags.find matching p.tag (write side) for both w and r target displays — logically OK because after ensure() we call set() with the new tag id, but the initial render before an ensure will show empty 'bound' state even when props still hold w_addr from prior save; consider deriving bound from p.w_addr/p.r_addr when tag missing.",
+    "ShapePick.jsx immediately calls set(url, {appearance:'image'}) after upload — this overrides user's current appearance choice silently. Consider only switching appearance if it was 'shape' (default) and preserve 'transparent' selections.",
+    "MultiState.FuncButton: with min_press_ms>0, the onClick handler still calls fire() only if ms<=0 — good. However, pointerLeave clears the timer without distinguishing intentional leave vs. accidental drift; users might feel the button 'cancels' too eagerly on small movements.",
+    "PdfDialog.jsx: 'log' mode filename uses fmt suffix directly; if backend renames extension (e.g. .xlsx vs .xls) frontend won't match. Currently backend returns .xlsx so OK.",
+    "Runtime.jsx exportPdf/exportLog only accept record_no; if project has no records the dialog still opens and the download will 404. Minor."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100% (all 4 specified scenarios passed)"},
+  "test_credentials": "amoskun99@gmail.com / admin123",
+  "seed_data_creation": "Temporary: 1 shape upload, 2 auto tags (M100.0 dropped intentionally during transient direct-binding on word button, M20.1 for bit button), 1 word_button widget, 2 func_button widgets. All removed via API PUT /projects/{id} + DELETE /api/tags/{id}. Verified post-cleanup: Utama has only the original 2 func_buttons (LAPORAN,DETAIL), bit_button rebound to Pompa_Run tag, shapes=[], no auto=true tags remain.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "AddrBinding testids: addr-binding, addr-mode-tag, addr-mode-direct, addr-w-device, addr-w-address, addr-w-type (word only), addr-w-bound, addr-w-error, addr-separate-read, addr-r-device, addr-r-address. FuncButton testids: prop-appearance (shape/image/transparent), prop-min_press_ms, prop-action (options include export_pdf/export_log), shape-picker, shape-import-btn, shape-lib-{i}, func-shape-img (canvas widget in editor & runtime), func-transparent (runtime run-mode only), func-hold-progress. PdfDialog: pdf-dialog, export-format-picker (only when kind='log'), export-format-{pdf|xlsx|csv}, pdf-download-btn. Preview route is /preview/{id} (not /editor/{id} which is /projects/{id}/editor). Simulator is running so direct M20.1 write instantly flips POMPA OFF -> POMPA ON in preview.",
+  "rca of the issue": "No bugs found. All specified UI + integration behaviour matches the request."
+}

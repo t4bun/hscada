@@ -53,7 +53,15 @@ Extra: import photo, shape, font; widgets gauge, bar, history trend, chart trend
 - Project setting "Penyimpanan Data Record": auto-delete record samples older than N days (1–3650, default 90, on by default), engine runs cleanup hourly
 - Storage stats (samples, est. size, oldest/newest, last cleanup) + "Bersihkan Sekarang" button; global 90-day TTL index replaced by per-project retention
 
+## Implemented — Iteration 6/7: Deploy cepat & tombol (2026-06)
+- Hidden engineer path (system settings): operator root shows default published runtime, engineer at /<secret-path>/...; /api/boot, /api/system/settings, /api/system/restart (local)
+- Local URL: mDNS name.local (zeroconf), custom domain (hosts file + router DNS guide), configurable port (launcher restart loop, firewall rule)
+- Project export/import (.nhmi: screens, widgets, devices, tags, alarms, data records, client groups/users, settings, images/shapes; no history), import with "langsung publish"
+- Bit/Word button direct address (auto tag via /tags/ensure) + optional separate read address
+- History trend PDF (chart only) separated from Data Log export (PDF/Excel/CSV) via new function button action export_log
+- Function button: shape/image from project shape library or import, transparent mode, minimum press time (ms)
+
 ## Backlog
-- Fase 2: backup/restore project to file, export/import project between PCs, raw-frame communication log page
+- Fase 2: raw-frame communication log page, backup schedule
 - Fase 3: Edge Gateway hybrid (cloud app + local agent with offline buffer), remote runtime access
 - P2: Scripts/expressions on tags, recipe management, WebSocket push
