@@ -69,6 +69,10 @@ Extra: import photo, shape, font; widgets gauge, bar, history trend, chart trend
 - Numeric Display/Input min & max prefilled from data type (editable, out-of-range rejected/red); Character Display max chars 1–256 (default 1); data types BCD16/BCD32 + STRING (length); Omron address suggests BCD16
 - Alarm history auto-delete (alarm_retention_days) with storage stats & clean-now
 
+## Implemented — Iteration 9: Kiosk Exit PIN (2026-06)
+- PIN 4–8 digit (bcrypt hash in system settings, never returned); POST /api/kiosk/verify with 5-fail/60s lockout
+- Runtime kiosk with PIN: toolbar hidden, hold top-right corner 3s → PIN keypad dialog → exit kiosk; without PIN: exit button in toolbar
+
 ## Backlog
 - Fase 2: raw-frame communication log page, backup schedule
 - Fase 3: Edge Gateway hybrid (cloud app + local agent with offline buffer), remote runtime access

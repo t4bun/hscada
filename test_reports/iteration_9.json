@@ -1,0 +1,24 @@
+{
+  "summary": "Iteration 9 - Kiosk Exit PIN feature. Backend pytest 10/10 passed (validation, set/verify/clear cycle, 5-fail 429 lockout via X-Forwarded-For, GET/boot never leak kiosk_pin_hash, empty PIN keeps existing). Frontend Playwright end-to-end: Server dialog kiosk-pin-section shows BELUM DIATUR then AKTIF after save with clear checkbox appearing; runtime with PIN set hides runtime-toolbar and shows kiosk-exit-hotspot (64x64 top-right), 3s hold opens kiosk-pin-dialog, wrong PIN shows 'PIN salah' via kiosk-pin-error, correct PIN closes dialog, strips ?kiosk=1 and toggles data-kiosk to false with toolbar visible; no-PIN kiosk shows runtime-toolbar + runtime-exit-kiosk-btn and no hotspot; non-kiosk runtime shows runtime-kiosk-btn. Env restored: kiosk_pin cleared, workspace 'Scada by T4bun', hide_engineer false, no logo.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/iteration9_test.py",
+    "/app/test_reports/pytest/iteration9.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "system.py kiosk_verify: lockout counter _pin_fails is in-memory per-process. In multi-worker deploys each worker has its own counter, weakening the 5-fail lockout. Consider persisting in Mongo with TTL or Redis if horizontal scale is required.",
+    "system.py kiosk_verify: when lockout expires, the 'n' counter is not reset before the next attempt (it stays incremented up to whatever value <5). Behavior is fine because it only trips at n>=5 then resets, but slightly non-obvious; a small comment or explicit reset when now>=until would improve clarity.",
+    "KioskPin.jsx: hotspot uses onPointerLeave to cancel the 3s timer; on touch devices, small finger movement outside the 64px zone cancels unlock. Consider tracking movement threshold or accepting cancellation only on pointerup/pointercancel for better mobile UX.",
+    "Runtime.jsx line 87: kiosk state also triggers when display-mode is fullscreen/standalone even without ?kiosk=1; combined with brand.kiosk_pin_set that means launching the PWA locks the toolbar until the correct PIN. Intended, but worth documenting for the user."
+  ],
+  "updated_files": ["/app/backend/tests/iteration9_test.py", "/app/test_reports/iteration_9.json"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% of exercised flows"},
+  "test_credentials": "amoskun99@gmail.com / admin123",
+  "seed_data_creation": "Ephemeral: set kiosk_pin=24680 then cleared. Final /api/system/settings state: kiosk_pin_set=false, workspace_name='Scada by T4bun', workspace_logo='', hide_engineer=false. Only project remains 'Demo Pengolahan Air' (slug ghdhbuxrp4e).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Kiosk PIN testids: kiosk-pin-section, kiosk-pin-status (AKTIF/BELUM DIATUR), kiosk-pin-new-input, kiosk-pin-clear (checkbox, only when set), kiosk-exit-hotspot (top-right 64px, 3s hold), kiosk-pin-dialog, kiosk-pin-display, kiosk-pin-input (hidden), kiosk-key-0..9/del/clear, kiosk-pin-submit, kiosk-pin-error. Endpoints: PUT /api/system/settings requires full body incl kiosk_pin/kiosk_pin_clear; POST /api/kiosk/verify {pin} public; GET /api/boot returns kiosk_pin_set. Lockout is in-memory per-process keyed by X-Forwarded-For (or client.host). GET /api/system/settings and PUT response strip kiosk_pin_hash and add kiosk_pin_set bool.",
+  "rca of the issue": "No bugs found."
+}
