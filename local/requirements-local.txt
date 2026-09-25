@@ -19,3 +19,5 @@ reportlab==5.0.1
 requests==2.34.2
 starlette==0.37.2
 uvicorn==0.25.0
+ifaddr==0.2.0
+zeroconf==0.151.3

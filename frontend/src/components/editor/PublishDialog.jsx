@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Copy, ExternalLink, Globe, Rocket } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -9,6 +9,8 @@ import { api, errMsg } from "@/lib/api";
 export const PublishDialog = ({ open, onOpenChange, project, beforePublish, onUpdated }) => {
   const [operate, setOperate] = useState(project.allow_operate ?? true);
   const [busy, setBusy] = useState(false);
+  const [localUrls, setLocalUrls] = useState([]);
+  useEffect(() => { if (open) api.get("/system/info").then((r) => setLocalUrls(r.data.mode === "local" ? r.data.urls : [])).catch(() => {}); }, [open]);
   const url = project.publish_slug ? `${window.location.origin}/view/${project.publish_slug}` : "";
   const publish = async () => {
     setBusy(true);
@@ -49,6 +51,13 @@ export const PublishDialog = ({ open, onOpenChange, project, beforePublish, onUp
                 <Button size="icon" variant="secondary" data-testid="publish-open-btn" onClick={() => window.open(url, "_blank")}><ExternalLink size={14} /></Button>
               </div>
               {project.published_at && <p className="text-[11px] text-slate-500">Terakhir publish: {new Date(project.published_at).toLocaleString("id-ID")}</p>}
+              {localUrls.length > 0 && (
+                <div data-testid="publish-local-urls" className="space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Alamat Jaringan Lokal</p>
+                  {localUrls.map((u) => <p key={u} className="font-mono text-[11px] text-emerald-300">{u}/view/{project.publish_slug}</p>)}
+                  <p className="text-[10px] text-slate-500">Atur nama .local, domain, port & project default di Project Manager → Server.</p>
+                </div>
+              )}
             </div>
           )}
           <div className="flex gap-2 pt-2">

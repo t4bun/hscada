@@ -70,8 +70,10 @@ const Subscreen = ({ screen, onClose }) => (
   </div>
 );
 
-export default function Runtime({ mode }) {
-  const { id, slug } = useParams();
+export default function Runtime({ mode, slugOverride }) {
+  const params = useParams();
+  const id = params.id;
+  const slug = slugOverride || params.slug;
   const tokenKey = `hmi_client_${slug}`;
   const [app, setApp] = useState(null);
   const [needLogin, setNeedLogin] = useState(null);
@@ -79,7 +81,7 @@ export default function Runtime({ mode }) {
   const [screenId, setScreenId] = useState(null);
   const [subId, setSubId] = useState(null);
   const [fs, setFs] = useState(false);
-  const [pdfNo, setPdfNo] = useState(null);
+  const [pdf, setPdf] = useState(null);
   const seen = useRef(new Set());
   const base = mode === "public" ? `/public/${slug}/rt` : `/projects/${id}/rt`;
 
@@ -135,7 +137,7 @@ export default function Runtime({ mode }) {
   const rt = useMemo(() => ({
     values: live.snap.values, quality: live.snap.quality, ts: live.snap.ts, tagMap, mode: "run",
     allowOperate: !!app?.allow_operate && (!group || group.can_operate), canAck: !group || group.can_ack,
-    level: group ? group.level : 99, write: live.write, base, records, exportPdf: setPdfNo, gotoScreen: nav.openScreen, ...nav,
+    level: group ? group.level : 99, write: live.write, base, records, exportPdf: (no) => setPdf({ no, kind: "chart" }), exportLog: (no) => setPdf({ no, kind: "log" }), gotoScreen: nav.openScreen, ...nav,
   }), [live.snap, tagMap, app, group, live.write, base, nav, records]);
 
   useEffect(() => {
@@ -198,7 +200,7 @@ export default function Runtime({ mode }) {
           </button>
         </div>
         {idle && <ScreenSaver name={app.name} />}
-        <PdfDialog no={pdfNo} base={base} onClose={() => setPdfNo(null)} />
+        <PdfDialog req={pdf} base={base} onClose={() => setPdf(null)} />
       </div>
     </RtContext.Provider>
   );

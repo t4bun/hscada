@@ -4,6 +4,8 @@ import { Upload, Trash2, ArrowUpToLine, ArrowDownToLine, Copy, Plus, AlignStartV
 import { WIDGETS } from "@/components/widgets/registry";
 import { BUILTIN_FONTS, DATA_TYPES, TYPE_SPEC, specFor, defaultDecimals, SERIES_COLORS } from "@/lib/format";
 import { uploadFile, errMsg, assetUrl } from "@/lib/api";
+import { AddrBinding } from "./AddrBinding";
+import { ShapePick } from "./ShapePick";
 
 const inputCls = "w-full h-8 bg-[#0B0F17] border border-slate-700 rounded-sm px-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500";
 const Row = ({ label, children }) => (
@@ -125,6 +127,8 @@ const Field = ({ f, value, set, ctx, widget }) => {
       );
     }
     case "heading": return null;
+    case "addr": return <AddrBinding p={widget.props} set={set} ctx={ctx} bit={f.bit} />;
+    case "shapeimg": return <ShapePick value={value} set={set} ctx={ctx} />;
     case "record": return (
       <select data-testid={id} className={inputCls} value={value || ""} onChange={(e) => set(Number(e.target.value))}>
         <option value="">— pilih data record —</option>

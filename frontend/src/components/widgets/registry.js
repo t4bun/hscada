@@ -15,6 +15,10 @@ const wordStates = () => [
   { value: 2, text: "FAULT", bg: "#DC2626", color: "#FFFFFF", blink: true },
 ];
 
+const ADDR_PROPS = { addr_mode: "tag", use_read: false, w_dev: "", w_addr: "", w_type: "INT16", r_dev: "", r_addr: "", r_type: "INT16" };
+const FN_ACTIONS = [["open_screen", "Open Screen"], ["open_subscreen", "Open Subscreen (popup)"], ["previous", "Previous Screen"], ["next", "Next Screen"], ["close_subscreen", "Close Subscreen"], ["export_pdf", "Export History Trend → PDF"], ["export_log", "Export Data Log (PDF / Excel / CSV)"]];
+const FN_LOOK = [["shape", "Bentuk standar"], ["image", "Shape / Gambar"], ["transparent", "Transparan (tak terlihat)"]];
+
 export const WIDGETS = {
   label: { name: "Teks / Label", icon: "Type", group: "Dasar", size: [220, 40],
     props: { text: "Label", font_family: "IBM Plex Sans", font_size: 18, color: "#F8FAFC", bg: "transparent", bold: false, italic: false, align: "left" },
@@ -76,11 +80,11 @@ export const WIDGETS = {
     props: { title: "DATA RECORD", record_no: 1, rows: 20 },
     fields: [f("title", "Judul"), f("record_no", "No. Data Record", "record"), f("rows", "Jumlah Baris", "number")] },
   bit_button: { name: "Bit Button", icon: "ToggleLeft", group: "Tombol & Lampu", size: [140, 56],
-    props: { tag: "", read_tag: "", mode: "toggle", pulse_ms: 500, shape: "bevel3d", states: bitStates("OFF", "ON"), font_family: "Chivo", font_size: 15, min_level: 0 },
-    fields: [{ ...TAG, label: "Tag Tulis (Bit)" }, f("read_tag", "Tag Monitor (opsional)", "tag"), f("mode", "Tipe Bit", "select", { options: [["set_on", "Set ON"], ["set_off", "Set OFF"], ["momentary", "Momentary"], ["toggle", "Switch (Toggle)"]] }), f("pulse_ms", "Durasi Momentary (ms, 0 = selama ditekan)", "number"), f("shape", "Bentuk", "select", { options: BTN_SHAPES }), f("states", "State", "states", { bit: true }), ...FONT, SEC] },
+    props: { tag: "", read_tag: "", ...ADDR_PROPS, w_type: "BOOL", r_type: "BOOL", mode: "toggle", pulse_ms: 500, shape: "bevel3d", states: bitStates("OFF", "ON"), font_family: "Chivo", font_size: 15, min_level: 0 },
+    fields: [f("tag", "Alamat Tulis / Baca (Bit)", "addr", { bit: true }), f("mode", "Tipe Bit", "select", { options: [["set_on", "Set ON"], ["set_off", "Set OFF"], ["momentary", "Momentary"], ["toggle", "Switch (Toggle)"]] }), f("pulse_ms", "Durasi Momentary (ms, 0 = selama ditekan)", "number"), f("shape", "Bentuk", "select", { options: BTN_SHAPES }), f("states", "State", "states", { bit: true }), ...FONT, SEC] },
   word_button: { name: "Word Button", icon: "Binary", group: "Tombol & Lampu", size: [140, 56],
-    props: { tag: "", read_tag: "", mode: "cycle", value: 1, step: 1, min: 0, max: 100, caption: "", shape: "rounded", states: wordStates(), font_family: "Chivo", font_size: 15, min_level: 0 },
-    fields: [{ ...TAG, label: "Tag Tulis (Word)" }, f("read_tag", "Tag Monitor (opsional)", "tag"), f("mode", "Aksi Word", "select", { options: [["set_value", "Set Nilai Konstan"], ["increment", "Tambah (+step)"], ["decrement", "Kurang (-step)"], ["cycle", "Siklus State"]] }), f("value", "Nilai Konstan", "number"), f("step", "Step", "number"), f("min", "Min", "number"), f("max", "Maks", "number"), f("caption", "Teks Tetap (opsional)"), f("shape", "Bentuk", "select", { options: BTN_SHAPES }), f("states", "State (multi-state)", "states"), ...FONT, SEC] },
+    props: { tag: "", read_tag: "", ...ADDR_PROPS, mode: "cycle", value: 1, step: 1, min: 0, max: 100, caption: "", shape: "rounded", states: wordStates(), font_family: "Chivo", font_size: 15, min_level: 0 },
+    fields: [f("tag", "Alamat Tulis / Baca (Word)", "addr"), f("mode", "Aksi Word", "select", { options: [["set_value", "Set Nilai Konstan"], ["increment", "Tambah (+step)"], ["decrement", "Kurang (-step)"], ["cycle", "Siklus State"]] }), f("value", "Nilai Konstan", "number"), f("step", "Step", "number"), f("min", "Min", "number"), f("max", "Maks", "number"), f("caption", "Teks Tetap (opsional)"), f("shape", "Bentuk", "select", { options: BTN_SHAPES }), f("states", "State (multi-state)", "states"), ...FONT, SEC] },
   bit_lamp: { name: "Bit Lamp", icon: "Lightbulb", group: "Tombol & Lampu", size: [64, 64],
     props: { tag: "", shape: "bezel_round", show_text: false, states: bitStates("OFF", "ON", "#1F2937", "#22C55E"), font_family: "Chivo", font_size: 12 },
     fields: [{ ...TAG, label: "Tag (Bit)" }, f("shape", "Bentuk", "select", { options: LAMP_SHAPES }), f("show_text", "Tampilkan Teks", "bool"), f("states", "State", "states", { bit: true }), ...FONT] },
@@ -91,8 +95,10 @@ export const WIDGETS = {
     props: { tag: "", label: "TEKS", mode: "ascii", states: wordStates(), font_family: "Share Tech Mono", font_size: 22, color: "#FBBF24", bg: "#0F172A", align: "left" },
     fields: [TAG, f("label", "Label"), f("mode", "Mode", "select", { options: [["ascii", "ASCII (karakter dari word)"], ["message", "Pesan per nilai (word)"]] }), f("_len", "Panjang Karakter", "charinfo"), f("states", "Daftar Pesan (mode pesan)", "states"), ...FONT, f("color", "Warna", "color"), f("bg", "Latar", "color"), f("align", "Rata", "select", { options: ["left", "center", "right"] })] },
   func_button: { name: "Function Button", icon: "SquareArrowOutUpRight", group: "Tombol & Lampu", size: [150, 48],
-    props: { text: "BUKA LAYAR", action: "open_screen", screen_id: "", record_no: 1, shape: "rounded", bg: "#2563EB", color: "#FFFFFF", font_family: "Chivo", font_size: 14, min_level: 0 },
-    fields: [f("text", "Teks"), f("action", "Fungsi", "select", { options: [["open_screen", "Open Screen"], ["open_subscreen", "Open Subscreen (popup)"], ["previous", "Previous Screen"], ["next", "Next Screen"], ["close_subscreen", "Close Subscreen"], ["export_pdf", "Export Data Record → PDF"]] }), f("screen_id", "Layar Tujuan", "screen"), f("record_no", "No. Data Record (Export PDF)", "record"), f("shape", "Bentuk", "select", { options: BTN_SHAPES }), f("bg", "Warna", "color"), f("color", "Warna Teks", "color"), ...FONT, SEC] },
+    props: { text: "BUKA LAYAR", action: "open_screen", screen_id: "", record_no: 1, appearance: "shape", image: "", show_text: true, min_press_ms: 0, shape: "rounded", bg: "#2563EB", color: "#FFFFFF", font_family: "Chivo", font_size: 14, min_level: 0 },
+    fields: [f("text", "Teks"), f("action", "Fungsi", "select", { options: FN_ACTIONS }), f("screen_id", "Layar Tujuan", "screen"), f("record_no", "No. Data Record (Export)", "record"),
+      f("appearance", "Tampilan", "select", { options: FN_LOOK }), f("image", "Shape / Gambar (mode Shape)", "shapeimg"), f("show_text", "Tampilkan Teks", "bool"),
+      f("min_press_ms", "Minimal Waktu Tekan (ms, 0 = langsung)", "number"), f("shape", "Bentuk", "select", { options: BTN_SHAPES }), f("bg", "Warna", "color"), f("color", "Warna Teks", "color"), ...FONT, SEC] },
   ...Object.fromEntries([["pump", "Pompa", "Fan"], ["valve", "Valve", "Merge"], ["motor", "Motor", "Cog"], ["conveyor", "Konveyor", "ArrowRightLeft"], ["fan", "Kipas / Blower", "Wind"]].map(([s, name, icon]) => [`sym_${s}`, {
     name, icon, group: "Simbol Industri", size: s === "conveyor" ? [200, 90] : [90, 100],
     props: { symbol: s, tag: "", tag_mode: "bit", animate: true, show_label: true, label: "", states: bitStates("STOP", "RUN", "#64748B", "#22C55E") },

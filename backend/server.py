@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import secrets
 import socket
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -17,7 +16,9 @@ from drivers import PROTOCOLS, validate_address, infer_type
 from plc_ext import list_serial_ports
 from security import router as security_router, client_from_request
 from tag_import import parse_tag_file
-from records import router as records_router, build_pdf
+from records import router as records_router, build_chart_pdf, build_log
+from system import router as system_router, get_sys, local_urls, startup_system
+from transfer import router as transfer_router, publish_project
 from engine import Engine
 from formats import TYPE_SPEC, spec_for
 from seed import create_demo_project
@@ -65,6 +66,13 @@ class ProjectUpdate(BaseModel):
     settings: Optional[dict] = None
     text_library: Optional[List[dict]] = None
     fonts: Optional[List[dict]] = None
+    shapes: Optional[List[dict]] = None
+
+
+class EnsureTagIn(BaseModel):
+    device_id: str
+    address: str = Field(min_length=1)
+    data_type: str
 
 
 class PublishIn(BaseModel):
@@ -270,11 +278,7 @@ async def delete_project(project_id: str, user=Depends(get_current_user)):
 @api.post("/projects/{project_id}/publish")
 async def publish(project_id: str, body: PublishIn, user=Depends(get_current_user)):
     p = await owned_project(project_id, user)
-    slug = p.get("publish_slug") or secrets.token_urlsafe(8).replace("_", "x").replace("-", "y").lower()
-    upd = {"published": True, "publish_slug": slug, "allow_operate": body.allow_operate, "published_at": now_iso(),
-           "published_screens": p["screens"], "published_meta": {"name": p["name"], "width": p["width"], "height": p["height"], "fonts": p.get("fonts", [])}}
-    await db.projects.update_one({"id": project_id}, {"$set": upd})
-    return {"published": True, "publish_slug": slug, "allow_operate": body.allow_operate, "published_at": upd["published_at"]}
+    return await publish_project(p, body.allow_operate)
 
 
 @api.post("/projects/{project_id}/unpublish")
@@ -359,27 +363,12 @@ async def serial_ports(user=Depends(get_current_user)):
         raise HTTPException(500, f"Gagal membaca daftar port: {e}")
 
 
-def lan_addresses():
-    ips = set()
-    try:
-        ips.update(socket.gethostbyname_ex(socket.gethostname())[2])
-    except OSError:
-        pass
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("10.255.255.255", 1))
-        ips.add(s.getsockname()[0])
-        s.close()
-    except OSError:
-        pass
-    return sorted(ip for ip in ips if not ip.startswith("127."))
-
 
 @api.get("/system/info")
 async def system_info(user=Depends(get_current_user)):
     mode = os.environ.get("APP_MODE", "cloud")
     port = os.environ.get("HTTP_PORT", "8080")
-    urls = [f"http://{ip}:{port}" for ip in lan_addresses()] if mode == "local" else []
+    urls = local_urls(await get_sys()) if mode == "local" else []
     return {"mode": mode, "hostname": socket.gethostname(), "port": port, "urls": urls, "local_url": f"http://localhost:{port}" if mode == "local" else None}
 
 
@@ -495,15 +484,27 @@ def make_rt_router(resolver):
         rows = await db.record_samples.find({"project_id": ctx["id"], "record": no, "ts": {"$gte": s, "$lte": e}}, {"_id": 0, "ts": 1, "v": 1}).sort("ts", -1).to_list(min(limit, 20000))
         return [{"ts": x["ts"].replace(tzinfo=timezone.utc).isoformat(), "v": x["v"]} for x in reversed(rows)]
 
-    @r.get("/records/{no}/pdf")
-    async def pdf(no: int, start: Optional[str] = None, end: Optional[str] = None, minutes: int = 60, ctx=Depends(resolver)):
-        rec = await record_meta(ctx["id"], no)
+    async def export_ctx(pid, no, start, end, minutes, limit=20000):
+        rec = await record_meta(pid, no)
         s, e = time_range(start, end, minutes)
-        rows = await db.record_samples.find({"project_id": ctx["id"], "record": no, "ts": {"$gte": s, "$lte": e}}, {"_id": 0}).sort("ts", 1).to_list(20000)
-        tags = {t["id"]: t for t in await db.tags.find({"project_id": ctx["id"]}, {"_id": 0}).to_list(5000)}
-        p = await db.projects.find_one({"id": ctx["id"]}, {"_id": 0, "name": 1})
-        data = await asyncio.to_thread(build_pdf, p["name"], rec, tags, rows, s, e)
-        return Response(data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=record-{no}.pdf"})
+        rows = await db.record_samples.find({"project_id": pid, "record": no, "ts": {"$gte": s, "$lte": e}}, {"_id": 0}).sort("ts", 1).to_list(limit)
+        tags = {t["id"]: t for t in await db.tags.find({"project_id": pid}, {"_id": 0}).to_list(5000)}
+        p = await db.projects.find_one({"id": pid}, {"_id": 0, "name": 1})
+        return p["name"], rec, tags, rows, s, e
+
+    @r.get("/records/{no}/pdf")
+    async def pdf(no: int, start: Optional[str] = None, end: Optional[str] = None, minutes: int = 60, tz: int = 0, ctx=Depends(resolver)):
+        args = await export_ctx(ctx["id"], no, start, end, minutes)
+        data = await asyncio.to_thread(build_chart_pdf, *args, tz)
+        return Response(data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=trend-record-{no}.pdf"})
+
+    @r.get("/records/{no}/log")
+    async def log(no: int, format: str = "csv", start: Optional[str] = None, end: Optional[str] = None, minutes: int = 60, tz: int = 0, ctx=Depends(resolver)):
+        if format not in ("pdf", "xlsx", "csv"):
+            raise HTTPException(400, "Format harus pdf, xlsx, atau csv")
+        args = await export_ctx(ctx["id"], no, start, end, minutes, 200000)
+        data, mime = await asyncio.to_thread(build_log, *args, tz, format)
+        return Response(data, media_type=mime, headers={"Content-Disposition": f"attachment; filename=datalog-record-{no}.{format}"})
 
     @r.post("/write")
     async def write(body: WriteIn, ctx=Depends(resolver)):
@@ -620,6 +621,34 @@ async def import_tags(project_id: str, device_id: str = Form(...), file: UploadF
     return {"created": len(created), "skipped": skipped, "total": len(rows)}
 
 
+@api.post("/projects/{project_id}/tags/ensure")
+async def ensure_tag(project_id: str, body: EnsureTagIn, user=Depends(get_current_user)):
+    await owned_project(project_id, user)
+    dev = await db.devices.find_one({"id": body.device_id, "project_id": project_id}, {"_id": 0})
+    if not dev:
+        raise HTTPException(400, "Perangkat tidak valid")
+    if body.data_type not in TYPE_SPEC:
+        raise HTTPException(400, "Tipe data tidak valid")
+    addr = body.address.strip()
+    try:
+        validate_address(dev["protocol"], addr)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    t = await db.tags.find_one({"project_id": project_id, "device_id": dev["id"], "address": addr, "data_type": body.data_type}, {"_id": 0})
+    if not t:
+        base = "".join(ch if ch.isalnum() else "_" for ch in f"{dev['name']}_{addr}").strip("_")[:50]
+        names = {x["name"] async for x in db.tags.find({"project_id": project_id}, {"_id": 0, "name": 1})}
+        name, i = base, 2
+        while name in names:
+            name, i = f"{base}_{i}", i + 1
+        tag = TagIn(name=name, device_id=dev["id"], address=addr, data_type=body.data_type, decimals=0, description="Auto dari widget (alamat langsung)",
+                    sim_mode="static" if body.data_type == "BOOL" else "sine")
+        t = tag.model_dump() | {"id": str(uuid.uuid4()), "project_id": project_id, "auto": True}
+        await db.tags.insert_one(dict(t))
+        await engine.load_config()
+    return tag_out(t)
+
+
 @api.get("/projects/{project_id}/tags/export")
 async def export_tags(project_id: str, user=Depends(get_current_user)):
     await owned_project(project_id, user)
@@ -670,6 +699,8 @@ async def root():
 app.include_router(api)
 app.include_router(security_router, prefix="/api")
 app.include_router(records_router, prefix="/api")
+app.include_router(system_router, prefix="/api")
+app.include_router(transfer_router, prefix="/api")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.environ["FRONTEND_URL"], "http://localhost:3000"],
@@ -708,6 +739,10 @@ async def startup():
         except Exception as e:
             logger.error(f"Storage init failed: {e}")
     asyncio.create_task(engine.run())
+    try:
+        await startup_system()
+    except Exception as e:
+        logger.error(f"System startup failed: {e}")
 
 
 @app.on_event("shutdown")

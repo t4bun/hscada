@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, Pencil, Cpu, ExternalLink, Trash2, LogOut, Layers, Tags, Globe, Activity } from "lucide-react";
+import { Plus, Pencil, Cpu, ExternalLink, Trash2, LogOut, Layers, Tags, Globe, Activity, Download, Upload, Server } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { api, errMsg } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { LocalAccess } from "@/components/LocalAccess";
+import { ServerSettingsDialog } from "@/components/ServerSettingsDialog";
+import { ImportProjectDialog } from "@/components/ImportProjectDialog";
 
 const inputCls = "w-full h-10 bg-[#0B0F17] border border-slate-700 rounded-sm px-3 text-sm text-slate-100 focus:outline-none focus:border-blue-500";
 
@@ -42,7 +44,7 @@ const Stat = ({ icon: I, v, l }) => (
   <div className="flex items-center gap-1.5 text-xs text-slate-400"><I size={13} className="text-slate-500" /><b className="text-slate-200 font-mono">{v}</b>{l}</div>
 );
 
-const ProjectRow = ({ p, i, onDelete }) => (
+const ProjectRow = ({ p, i, onDelete, onExport }) => (
   <article data-testid={`project-card-${i}`} className="group grid lg:grid-cols-[64px_1fr_auto] gap-6 items-center border border-slate-800 bg-[#111827] hover:border-slate-600 p-6 rounded-sm transition-colors hmi-rise" style={{ animationDelay: `${i * 60}ms` }}>
     <span className="font-mono text-3xl font-bold text-slate-700 group-hover:text-blue-500 transition-colors">{String(i + 1).padStart(2, "0")}</span>
     <div className="space-y-3 min-w-0">
@@ -64,6 +66,7 @@ const ProjectRow = ({ p, i, onDelete }) => (
       <Link to={`/projects/${p.id}/editor`} data-testid={`open-editor-${i}`} className="h-9 px-4 flex items-center gap-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-sm transition-colors"><Pencil size={13} />Editor</Link>
       <Link to={`/projects/${p.id}/config`} data-testid={`open-config-${i}`} className="h-9 px-4 flex items-center gap-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-sm transition-colors"><Cpu size={13} />Perangkat & Tag</Link>
       {p.published && <a href={`/view/${p.publish_slug}`} target="_blank" rel="noreferrer" data-testid={`open-app-${i}`} className="h-9 px-3 flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-sm"><ExternalLink size={13} />App</a>}
+      <button data-testid={`export-project-${i}`} title="Export project (.nhmi)" onClick={() => onExport(p)} className="h-9 px-3 flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-sm transition-colors"><Download size={13} />Export</button>
       <button data-testid={`delete-project-${i}`} onClick={() => onDelete(p)} className="h-9 w-9 grid place-items-center bg-slate-800 hover:bg-red-800 text-slate-400 hover:text-white rounded-sm transition-colors"><Trash2 size={14} /></button>
     </div>
   </article>
@@ -76,6 +79,19 @@ export default function Projects() {
   const [open, setOpen] = useState(false);
   const [del, setDel] = useState(null);
   const load = () => api.get("/projects").then((r) => setItems(r.data)).catch((e) => toast.error(errMsg(e)));
+  const [srvOpen, setSrvOpen] = useState(false);
+  const [impOpen, setImpOpen] = useState(false);
+  const exportProject = async (p) => {
+    const t = toast.loading("Menyiapkan file export...");
+    try {
+      const { data } = await api.get(`/projects/${p.id}/export`, { responseType: "blob" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(data);
+      a.download = `${p.name.replace(/[^\w-]+/g, "_")}.nhmi`;
+      a.click();
+      toast.success("Project diexport", { id: t });
+    } catch (e) { toast.error(errMsg(e), { id: t }); }
+  };
   useEffect(() => { load(); }, []);
   const confirmDelete = async () => {
     await api.delete(`/projects/${del.id}`).catch((e) => toast.error(errMsg(e)));
@@ -88,6 +104,7 @@ export default function Projects() {
         <span className="font-heading font-black tracking-tight">NUSA<span className="text-blue-400">HMI</span></span>
         <span className="flex-1" />
         <span className="text-xs text-slate-400 mr-4 font-mono" data-testid="current-user-email">{user?.email}</span>
+        <button data-testid="server-settings-btn" onClick={() => setSrvOpen(true)} className="h-8 px-3 mr-1 text-xs flex items-center gap-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded-sm"><Server size={14} />Server</button>
         <button data-testid="logout-btn" onClick={signOut} className="h-8 px-3 text-xs flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-sm"><LogOut size={14} />Keluar</button>
       </header>
       <main className="max-w-6xl mx-auto px-6 lg:px-10 py-14 space-y-10">
@@ -98,14 +115,19 @@ export default function Projects() {
             <h1 className="font-heading text-4xl sm:text-5xl font-black tracking-tight">Proyek SCADA</h1>
             <p className="text-slate-400 text-sm max-w-xl">Setiap proyek berisi koneksi PLC, daftar tag, layar HMI, dan web app runtime yang bisa dipublish ke end-client.</p>
           </div>
-          <button data-testid="new-project-btn" onClick={() => setOpen(true)} className="h-11 px-5 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-sm font-semibold rounded-sm transition-colors self-start md:self-auto"><Plus size={16} />Proyek Baru</button>
+          <div className="flex gap-2 self-start md:self-auto">
+            <button data-testid="import-project-btn" onClick={() => setImpOpen(true)} className="h-11 px-5 flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-sm transition-colors"><Upload size={16} />Import</button>
+            <button data-testid="new-project-btn" onClick={() => setOpen(true)} className="h-11 px-5 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-sm font-semibold rounded-sm transition-colors"><Plus size={16} />Proyek Baru</button>
+          </div>
+          <ServerSettingsDialog open={srvOpen} onOpenChange={setSrvOpen} projects={items || []} />
+          <ImportProjectDialog open={impOpen} onOpenChange={setImpOpen} onDone={load} />
         </div>
         <section className="space-y-3" data-testid="project-list">
           {items === null && <p className="text-slate-500 font-mono text-sm">Memuat...</p>}
           {items?.length === 0 && (
             <div className="border border-dashed border-slate-700 p-16 text-center rounded-sm"><p className="text-slate-400">Belum ada proyek. Buat proyek pertama Anda.</p></div>
           )}
-          {items?.map((p, i) => <ProjectRow key={p.id} p={p} i={i} onDelete={setDel} />)}
+          {items?.map((p, i) => <ProjectRow key={p.id} p={p} i={i} onDelete={setDel} onExport={exportProject} />)}
         </section>
       </main>
       <CreateDialog open={open} onOpenChange={setOpen} onCreated={(p) => { setOpen(false); nav(`/projects/${p.id}/config`); toast.success("Proyek dibuat. Tambahkan perangkat PLC terlebih dahulu."); }} />

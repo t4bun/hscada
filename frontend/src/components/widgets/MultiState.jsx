@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useRt } from "@/hooks/useLive";
+import { assetUrl } from "@/lib/api";
 
 export const pickState = (states = [], v, bit) => {
   if (bit) return states[v ? 1 : 0] || {};
@@ -145,13 +146,36 @@ export const FuncButton = ({ p }) => {
   const rt = useRt();
   const can = rt.mode === "run" && (rt.level ?? 99) >= (Number(p.min_level) || 0);
   const [pressed, setPressed] = useState(false);
-  const click = () => {
-    if (!can) return;
-    ({ open_screen: () => rt.openScreen?.(p.screen_id), open_subscreen: () => rt.openSub?.(p.screen_id), previous: () => rt.prevScreen?.(), next: () => rt.nextScreen?.(), close_subscreen: () => rt.closeSub?.(), export_pdf: () => rt.exportPdf?.(Number(p.record_no) || 1) })[p.action]?.();
+  const [hold, setHold] = useState(false);
+  const timer = useRef();
+  const ms = Number(p.min_press_ms) || 0;
+  const fire = () => {
+    const no = Number(p.record_no) || 1;
+    ({ open_screen: () => rt.openScreen?.(p.screen_id), open_subscreen: () => rt.openSub?.(p.screen_id), previous: () => rt.prevScreen?.(), next: () => rt.nextScreen?.(), close_subscreen: () => rt.closeSub?.(), export_pdf: () => rt.exportPdf?.(no), export_log: () => rt.exportLog?.(no) })[p.action]?.();
   };
+  const down = () => {
+    setPressed(true);
+    if (can && ms > 0) { setHold(true); clearTimeout(timer.current); timer.current = setTimeout(() => { setHold(false); fire(); }, ms); }
+  };
+  const up = () => { setPressed(false); setHold(false); clearTimeout(timer.current); };
+  const click = () => { if (can && ms <= 0) fire(); };
+  const text = p.show_text !== false && <Txt p={p} st={{ text: p.text, color: p.color }} />;
+  let face;
+  if (p.appearance === "transparent") {
+    face = rt.mode === "run" ? <div className="w-full h-full" data-testid="func-transparent" />
+      : <div className="w-full h-full border border-dashed border-cyan-400/70 bg-cyan-400/5 flex items-center justify-center text-[10px] font-mono text-cyan-300 overflow-hidden">{p.text || "TRANSPARAN"}</div>;
+  } else if (p.appearance === "image" && p.image) {
+    face = (
+      <div className="relative w-full h-full" style={{ transform: pressed ? "scale(0.96)" : undefined, transition: "transform 80ms", filter: pressed ? "brightness(0.85)" : undefined }}>
+        <img src={assetUrl(p.image)} alt="" draggable={false} data-testid="func-shape-img" className="w-full h-full object-contain pointer-events-none" />
+        {text && <span className="absolute inset-0 flex items-center justify-center">{text}</span>}
+      </div>
+    );
+  } else face = <Surface shape={p.shape} bg={p.bg} color={p.color} pressed={pressed}>{text}</Surface>;
   return (
-    <button type="button" data-testid="hmi-func-button" className="w-full h-full block" onClick={click} onPointerDown={() => setPressed(true)} onPointerUp={() => setPressed(false)} onPointerLeave={() => setPressed(false)}>
-      <Surface shape={p.shape} bg={p.bg} color={p.color} pressed={pressed}><Txt p={p} st={{ text: p.text, color: p.color }} /></Surface>
+    <button type="button" data-testid="hmi-func-button" className="relative w-full h-full block outline-none" onClick={click} onPointerDown={down} onPointerUp={up} onPointerLeave={up}>
+      {face}
+      {hold && <span data-testid="func-hold-progress" className="absolute left-0 bottom-0 h-1 bg-amber-400 pointer-events-none" style={{ animation: `hmi-hold ${ms}ms linear forwards` }} />}
     </button>
   );
 };

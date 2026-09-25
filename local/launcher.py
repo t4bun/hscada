@@ -111,29 +111,37 @@ def main():
         return print(f"Konfigurasi dibuat di {CONFIG}")
     mongo, url = start_mongo(cfg)
     PIDS.write_text(json.dumps({"launcher": os.getpid(), "mongod": mongo.pid if mongo else None}))
+    try:
+        while True:
+            cfg = load_config()
+            if serve(cfg, url, args.service) != 3:
+                break
+            args.service = True
+            print("Restart layanan...")
+    finally:
+        if mongo:
+            mongo.terminate()
+        PIDS.unlink(missing_ok=True)
+
+
+def serve(cfg, url, service):
     http = int(cfg["http_port"])
     os.environ.update({
         "MONGO_URL": url, "DB_NAME": os.environ.get("DB_NAME") or cfg["db_name"], "JWT_SECRET": cfg["jwt_secret"],
         "ADMIN_EMAIL": cfg["admin_email"], "ADMIN_PASSWORD": cfg["admin_password"], "FRONTEND_URL": f"http://localhost:{http}",
         "APP_MODE": "local", "HTTP_PORT": str(http), "COOKIE_SECURE": "false", "STATIC_DIR": str(FRONTEND),
-        "LOCAL_STORAGE_DIR": str(DATA / "files"),
+        "LOCAL_STORAGE_DIR": str(DATA / "files"), "NUSAHMI_CONFIG": str(CONFIG), "NUSAHMI_DATA": str(DATA),
     })
+    sfx = "" if http == 80 else f":{http}"
     print("=" * 60 + "\n NusaHMI SCADA - Versi Lokal\n" + "=" * 60)
-    print(f" Buka di PC ini   : http://localhost:{http}")
+    print(f" Buka di PC ini   : http://localhost{sfx}")
     for ip in lan_ips():
-        print(f" Dari jaringan    : http://{ip}:{http}")
-    print(f" Login engineer   : lihat {DATA / 'LOGIN-ADMIN.txt'}\n" + "=" * 60)
-    if not args.service:
-        webbrowser.open(f"http://localhost:{http}")
-    sys.path.insert(0, str(BACKEND))
-    os.chdir(BACKEND)
-    try:
-        import uvicorn
-        uvicorn.run("server:app", host="0.0.0.0", port=http, log_level="info")
-    finally:
-        if mongo:
-            mongo.terminate()
-        PIDS.unlink(missing_ok=True)
+        print(f" Dari jaringan    : http://{ip}{sfx}")
+    print(f" Login engineer   : lihat {DATA / 'LOGIN-ADMIN.txt'} dan {DATA / 'ENGINEER-URL.txt'}\n" + "=" * 60)
+    if not service:
+        webbrowser.open(f"http://localhost{sfx}")
+    flags = subprocess.CREATE_NO_WINDOW if WIN else 0
+    return subprocess.call([sys.executable, "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", str(http)], cwd=str(BACKEND), creationflags=flags)
 
 
 if __name__ == "__main__":

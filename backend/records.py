@@ -179,20 +179,78 @@ async def del_def(pid: str, did: str, user=Depends(get_current_user)):
     return {"ok": True}
 
 
-def build_pdf(title: str, record: dict, tags: dict, rows: list, start: datetime, end: datetime) -> bytes:
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import matplotlib.dates as mdates
+def _local(ts: datetime, tz: int) -> datetime:
+    return ts.replace(tzinfo=None) - timedelta(minutes=tz)
+
+
+def _log_table(record: dict, tags: dict, rows: list, tz: int, max_cols: int = 99):
+    chans = [c for c in record["channels"] if c in tags][:max_cols]
+    head = ["Waktu"] + [f"{tags[c]['name']} ({tags[c].get('unit') or '-'})" for c in chans]
+    fmt = "%d/%m/%Y %H:%M:%S"
+    body = [[_local(r["ts"], tz).strftime(fmt)] + [None if r["v"].get(c) is None else round(r["v"][c], int(tags[c].get("decimals", 0) or 0)) for c in chans] for r in rows]
+    return head, body
+
+
+def build_log(title: str, record: dict, tags: dict, rows: list, start: datetime, end: datetime, tz: int, fmt: str):
+    if fmt == "csv":
+        import csv
+        head, body = _log_table(record, tags, rows, tz)
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(head)
+        w.writerows([["" if x is None else x for x in r] for r in body])
+        return ("\ufeff" + buf.getvalue()).encode("utf-8"), "text/csv"
+    if fmt == "xlsx":
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill
+        head, body = _log_table(record, tags, rows, tz)
+        wb = Workbook()
+        ws = wb.active
+        ws.title = f"Record {record['number']}"
+        ws.append([f"{title} — Data Record #{record['number']} {record.get('name', '')}"])
+        ws.append([f"{_local(start, tz):%d/%m/%Y %H:%M:%S} s/d {_local(end, tz):%d/%m/%Y %H:%M:%S} · {len(rows)} sampel"])
+        ws.append(head)
+        for c in ws[3]:
+            c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1E293B")
+        for r in body:
+            ws.append(r)
+        ws.column_dimensions["A"].width = 21
+        ws.freeze_panes = "B4"
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.lib.units import cm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    head, body = _log_table(record, tags, rows, tz, 12)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=1.2 * cm, rightMargin=1.2 * cm, topMargin=1 * cm, bottomMargin=1 * cm)
+    st = getSampleStyleSheet()
+    t = Table([head] + [["" if x is None else x for x in r] for r in body[:20000]], repeatRows=1)
+    t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E293B")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                           ("FONTSIZE", (0, 0), (-1, -1), 7), ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                           ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F1F5F9")])]))
+    doc.build([Paragraph(f"<b>{title}</b> — Data Log Record #{record['number']} {record.get('name', '')}", st["Title"]),
+               Paragraph(f"Rentang: {_local(start, tz):%d/%m/%Y %H:%M:%S} s/d {_local(end, tz):%d/%m/%Y %H:%M:%S} · {len(rows)} sampel", st["Normal"]),
+               Spacer(1, 6), t])
+    return buf.getvalue(), "application/pdf"
+
+
+def build_chart_pdf(title: str, record: dict, tags: dict, rows: list, start: datetime, end: datetime, tz: int = 0) -> bytes:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 
     chans = [c for c in record["channels"] if c in tags]
-    fig, ax = plt.subplots(figsize=(11, 4.2), dpi=110)
-    xs = [r["ts"] for r in rows]
+    fig, ax = plt.subplots(figsize=(11, 5.6), dpi=120)
+    xs = [_local(r["ts"], tz) for r in rows]
     for c in chans:
         ax.plot(xs, [r["v"].get(c) for r in rows], label=tags[c]["name"], linewidth=1.4)
     ax.grid(True, alpha=0.3)
@@ -210,18 +268,7 @@ def build_pdf(title: str, record: dict, tags: dict, rows: list, start: datetime,
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=1.2 * cm, rightMargin=1.2 * cm, topMargin=1 * cm, bottomMargin=1 * cm)
     st = getSampleStyleSheet()
     fmt = "%d/%m/%Y %H:%M:%S"
-    story = [Paragraph(f"<b>{title}</b> — Data Record #{record['number']} {record.get('name', '')}", st["Title"]),
-             Paragraph(f"Rentang: {start.strftime(fmt)} s/d {end.strftime(fmt)} (UTC) · {len(rows)} sampel", st["Normal"]),
-             Spacer(1, 6), Image(img, width=26 * cm, height=10 * cm), Spacer(1, 8)]
-    show = chans[:12]
-    data = [["Waktu"] + [f"{tags[c]['name']} ({tags[c].get('unit') or '-'})" for c in show]]
-    step = max(1, len(rows) // 400)
-    for r in rows[::step]:
-        data.append([r["ts"].strftime(fmt)] + ["" if r["v"].get(c) is None else f"{r['v'][c]:.{tags[c].get('decimals', 0) or 0}f}" for c in show])
-    t = Table(data, repeatRows=1)
-    t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E293B")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                           ("FONTSIZE", (0, 0), (-1, -1), 7), ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
-                           ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F1F5F9")])]))
-    story.append(t)
-    doc.build(story)
+    doc.build([Paragraph(f"<b>{title}</b> — History Trend Record #{record['number']} {record.get('name', '')}", st["Title"]),
+               Paragraph(f"Rentang: {_local(start, tz).strftime(fmt)} s/d {_local(end, tz).strftime(fmt)} · {len(rows)} sampel", st["Normal"]),
+               Spacer(1, 6), Image(img, width=26 * cm, height=13.2 * cm)])
     return buf.getvalue()

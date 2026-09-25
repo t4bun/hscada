@@ -127,7 +127,7 @@ export default function Editor() {
     const p = projRef.current;
     setSaving(true);
     try {
-      await api.put(`/projects/${id}`, { name: p.name, width: p.width, height: p.height, screens: p.screens, fonts: p.fonts || [] });
+      await api.put(`/projects/${id}`, { name: p.name, width: p.width, height: p.height, screens: p.screens, fonts: p.fonts || [], shapes: p.shapes || [] });
       setDirty(false);
       toast.success("Proyek disimpan");
     } catch (e) { toast.error(errMsg(e)); throw e; } finally { setSaving(false); }
@@ -208,7 +208,9 @@ export default function Editor() {
           <Inspector
             widget={widget} screen={screen} project={project}
             multi={sel.length > 1 ? { count: sel.length, grouped: selWidgets.some((w) => w.group), onAlign: align } : null}
-            ctx={{ tags, records, screens: project.screens, fonts: project.fonts || [] }}
+            ctx={{ tags, records, devices, projectId: id, screens: project.screens, fonts: project.fonts || [], shapes: project.shapes || [],
+              onTagCreated: (t) => setTags((ts) => (ts.some((x) => x.id === t.id) ? ts : [...ts, t])),
+              addShape: (s) => mutate((pr) => ({ shapes: [...(pr.shapes || []).filter((x) => x.url !== s.url), s] }), false) }}
             onProps={(patch) => updateWidget(widget.id, { props: { ...widget.props, ...patch } })}
             onGeom={(patch) => updateWidget(widget.id, patch)}
             onAction={action}
