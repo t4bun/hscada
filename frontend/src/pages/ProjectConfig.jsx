@@ -7,8 +7,11 @@ import { useLive } from "@/hooks/useLive";
 import { formatValue } from "@/lib/format";
 import { DeviceDialog } from "@/components/config/DeviceDialog";
 import { TagDialog } from "@/components/config/TagDialog";
+import { LibraryPanel } from "@/components/config/LibraryPanel";
+import { SecurityPanel } from "@/components/config/SecurityPanel";
+import { SettingsPanel } from "@/components/config/SettingsPanel";
 
-const ST = { online: "bg-emerald-500 text-emerald-400", simulasi: "bg-cyan-500 text-cyan-400", offline: "bg-red-500 text-red-400", menunggu: "bg-slate-500 text-slate-400" };
+const ST = { online: "bg-emerald-500 text-emerald-400", simulasi: "bg-cyan-500 text-cyan-400", internal: "bg-violet-500 text-violet-300", offline: "bg-red-500 text-red-400", menunggu: "bg-slate-500 text-slate-400" };
 
 const DeviceCard = ({ d, i, status, protocols, onEdit, onDelete, onTest }) => {
   const st = status?.status || "menunggu";
@@ -42,6 +45,7 @@ export default function ProjectConfig() {
   const [protocols, setProtocols] = useState({});
   const [devDlg, setDevDlg] = useState({ open: false, device: null });
   const [tagDlg, setTagDlg] = useState({ open: false, tag: null });
+  const [tab, setTab] = useState("devices");
   const live = useLive(`/projects/${id}/rt`, !!project);
 
   const load = () => Promise.all([api.get(`/projects/${id}`), api.get(`/projects/${id}/devices`), api.get(`/projects/${id}/tags`), api.get("/meta")])
@@ -66,12 +70,21 @@ export default function ProjectConfig() {
         <span className="font-heading font-bold text-sm">{project.name}</span>
         <nav className="flex items-center ml-4 text-xs">
           <Link to={`/projects/${id}/editor`} data-testid="nav-editor-link" className="px-3 h-8 flex items-center gap-1.5 text-slate-400 hover:text-white"><LayoutDashboard size={13} />Layar HMI</Link>
-          <span className="px-3 h-8 grid place-items-center border-b-2 border-blue-500 text-white font-semibold">Perangkat & Tag</span>
+          {[["devices", "Perangkat & Tag"], ["library", "Library Alamat"], ["security", "Keamanan"], ["settings", "Pengaturan"]].map(([k, l]) => (
+            <button key={k} data-testid={`config-tab-${k}`} onClick={() => setTab(k)} className={`px-3 h-8 border-b-2 transition-colors ${tab === k ? "border-blue-500 text-white font-semibold" : "border-transparent text-slate-400 hover:text-white"}`}>{l}</button>
+          ))}
         </nav>
         <span className="flex-1" />
         <span className={`text-[11px] font-mono flex items-center gap-1 ${live.snap.active_alarms ? "text-red-400" : "text-slate-500"}`}><Bell size={13} />{live.snap.active_alarms || 0} alarm aktif</span>
       </header>
-      <main className="max-w-7xl mx-auto px-6 lg:px-10 py-10 space-y-12">
+      {tab !== "devices" && (
+        <main className="max-w-7xl mx-auto px-6 lg:px-10 py-10">
+          {tab === "library" && <LibraryPanel projectId={id} devices={devices} tags={tags} protocols={protocols} onReload={load} onNewTag={(preset) => setTagDlg({ open: true, tag: null, preset })} onEditTag={(t) => setTagDlg({ open: true, tag: t })} />}
+          {tab === "security" && <SecurityPanel project={project} />}
+          {tab === "settings" && <SettingsPanel project={project} onSaved={load} />}
+        </main>
+      )}
+      {tab === "devices" && <main className="max-w-7xl mx-auto px-6 lg:px-10 py-10 space-y-12">
         <section className="space-y-5">
           <div className="flex items-end justify-between">
             <div><p className="text-[10px] font-bold uppercase tracking-[0.25em] text-blue-400">Driver & Koneksi</p><h2 className="font-heading text-2xl font-bold mt-1">Perangkat PLC</h2></div>
@@ -117,9 +130,9 @@ export default function ProjectConfig() {
             </table>
           </div>
         </section>
-      </main>
+      </main>}
       <DeviceDialog open={devDlg.open} onOpenChange={(o) => setDevDlg({ ...devDlg, open: o })} projectId={id} device={devDlg.device} protocols={protocols} onSaved={() => { setDevDlg({ open: false, device: null }); load(); }} />
-      <TagDialog open={tagDlg.open} onOpenChange={(o) => setTagDlg({ ...tagDlg, open: o })} projectId={id} tag={tagDlg.tag} devices={devices} protocols={protocols} onSaved={() => { setTagDlg({ open: false, tag: null }); load(); }} />
+      <TagDialog open={tagDlg.open} onOpenChange={(o) => setTagDlg({ ...tagDlg, open: o })} projectId={id} tag={tagDlg.tag} preset={tagDlg.preset} devices={devices} protocols={protocols} onSaved={() => { setTagDlg({ open: false, tag: null }); load(); }} />
     </div>
   );
 }

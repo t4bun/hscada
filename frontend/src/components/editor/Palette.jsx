@@ -11,7 +11,7 @@ export const Palette = ({ onAdd }) => (
       <div key={g} className="px-3 pb-3">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-1 py-2 border-b border-slate-800 mb-2">{g}</p>
         <div className="grid grid-cols-2 gap-1.5">
-          {Object.entries(WIDGETS).filter(([, d]) => d.group === g).map(([type, d]) => {
+          {Object.entries(WIDGETS).filter(([, d]) => d.group === g && !d.hidden).map(([type, d]) => {
             const I = Icons[d.icon] || Icons.Box;
             return (
               <button

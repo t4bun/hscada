@@ -2,6 +2,18 @@ const f = (key, label, type = "text", extra = {}) => ({ key, label, type, ...ext
 const TAG = f("tag", "Tag", "tag");
 const FONT = [f("font_family", "Font", "font"), f("font_size", "Ukuran Font", "number")];
 const NUM_FMT = [f("data_type", "Tipe Data", "datatype"), f("decimals", "Titik Desimal", "decimals"), f("unit", "Satuan")];
+const SEC = f("min_level", "Level Keamanan Min. (0 = semua)", "number");
+const BTN_SHAPES = [["flat", "Flat"], ["rounded", "Rounded"], ["pill", "Pill"], ["bevel3d", "3D Bevel"], ["bezel_round", "Pushbutton Bulat"], ["bezel_square", "Pushbutton Kotak"]];
+const LAMP_SHAPES = [["circle", "Bulat"], ["square", "Kotak"], ["bezel_round", "Pilot Lamp Bulat"], ["bezel_square", "Pilot Lamp Kotak"], ["led_bar", "LED Bar"]];
+const bitStates = (t0, t1, b0 = "#334155", b1 = "#16A34A") => [
+  { value: 0, text: t0, bg: b0, color: "#F8FAFC", blink: false },
+  { value: 1, text: t1, bg: b1, color: "#FFFFFF", blink: false },
+];
+const wordStates = () => [
+  { value: 0, text: "STOP", bg: "#334155", color: "#F8FAFC", blink: false },
+  { value: 1, text: "RUN", bg: "#16A34A", color: "#FFFFFF", blink: false },
+  { value: 2, text: "FAULT", bg: "#DC2626", color: "#FFFFFF", blink: true },
+];
 
 export const WIDGETS = {
   label: { name: "Teks / Label", icon: "Type", group: "Dasar", size: [220, 40],
@@ -19,24 +31,24 @@ export const WIDGETS = {
   image: { name: "Gambar / Foto", icon: "Image", group: "Dasar", size: [200, 150],
     props: { src: "", fit: "contain", opacity: 1, radius: 0 },
     fields: [f("src", "Gambar", "image"), f("fit", "Mode", "select", { options: ["contain", "cover", "fill"] }), f("opacity", "Opasitas (0-1)", "number"), f("radius", "Radius", "number")] },
-  button: { name: "Tombol", icon: "MousePointerClick", group: "Kontrol", size: [150, 48],
+  button: { name: "Tombol (lama)", icon: "MousePointerClick", group: "Kontrol", hidden: true, size: [150, 48],
     props: { text: "START", action: "toggle", tag: "", value: 0, screen_id: "", bg: "#1E293B", on_bg: "#059669", color: "#F8FAFC", font_size: 15, font_family: "Chivo", radius: 4 },
     fields: [f("text", "Teks"), f("action", "Aksi", "select", { options: [["toggle", "Toggle"], ["set_on", "Set ON"], ["set_off", "Set OFF"], ["momentary", "Momentary"], ["set_value", "Set Nilai"], ["goto", "Pindah Layar"]] }), TAG, f("value", "Nilai (Set Nilai)", "number"), f("screen_id", "Layar Tujuan", "screen"), f("bg", "Warna", "color"), f("on_bg", "Warna saat ON", "color"), f("color", "Warna Teks", "color"), ...FONT, f("radius", "Radius", "number")] },
-  switch: { name: "Saklar", icon: "ToggleRight", group: "Kontrol", size: [120, 48],
+  switch: { name: "Saklar", icon: "ToggleRight", group: "Kontrol", hidden: true, size: [120, 48],
     props: { tag: "", on_label: "ON", off_label: "OFF", on_color: "#10B981" },
     fields: [TAG, f("on_label", "Label ON"), f("off_label", "Label OFF"), f("on_color", "Warna ON", "color")] },
-  lamp: { name: "Lampu Indikator", icon: "Lightbulb", group: "Kontrol", size: [60, 60],
+  lamp: { name: "Lampu (lama)", icon: "Lightbulb", group: "Kontrol", hidden: true, size: [60, 60],
     props: { tag: "", label: "", on_color: "#22C55E", off_color: "#334155", shape: "circle", blink: false },
     fields: [TAG, f("label", "Label"), f("on_color", "Warna ON", "color"), f("off_color", "Warna OFF", "color"), f("shape", "Bentuk", "select", { options: ["circle", "square"] }), f("blink", "Berkedip saat ON", "bool")] },
-  numeric: { name: "Tampilan Angka", icon: "Hash", group: "Kontrol", size: [200, 64],
+  numeric: { name: "Numeric Display", icon: "Hash", group: "Kontrol", size: [200, 64],
     props: { tag: "", label: "NILAI", data_type: "INT16", decimals: 0, unit: "", font_size: 24, font_family: "JetBrains Mono", color: "#34D399", bg: "#0F172A", align: "right" },
     fields: [TAG, f("label", "Label"), ...NUM_FMT, ...FONT, f("color", "Warna Angka", "color"), f("bg", "Latar", "color"), f("align", "Rata", "select", { options: ["left", "center", "right"] })] },
   numeric_input: { name: "Input Setpoint", icon: "TextCursorInput", group: "Kontrol", size: [180, 52],
-    props: { tag: "", label: "SETPOINT", data_type: "INT16", decimals: 0, unit: "", font_size: 20, font_family: "JetBrains Mono", color: "#F8FAFC", bg: "#1E293B", align: "right" },
-    fields: [TAG, f("label", "Label"), ...NUM_FMT, ...FONT, f("color", "Warna", "color"), f("bg", "Latar", "color"), f("align", "Rata", "select", { options: ["left", "center", "right"] })] },
+    props: { tag: "", label: "SETPOINT", data_type: "INT16", decimals: 0, unit: "", font_size: 20, font_family: "JetBrains Mono", color: "#F8FAFC", bg: "#1E293B", align: "right", min_level: 0 },
+    fields: [TAG, f("label", "Label"), ...NUM_FMT, ...FONT, f("color", "Warna", "color"), f("bg", "Latar", "color"), f("align", "Rata", "select", { options: ["left", "center", "right"] }), SEC] },
   slider: { name: "Slider", icon: "SlidersHorizontal", group: "Kontrol", size: [240, 36],
     props: { tag: "", min: 0, max: 100, step: 1, color: "#3B82F6" },
-    fields: [TAG, f("min", "Min", "number"), f("max", "Maks", "number"), f("step", "Step", "number"), f("color", "Warna", "color")] },
+    fields: [TAG, f("min", "Min", "number"), f("max", "Maks", "number"), f("step", "Step", "number"), f("color", "Warna", "color"), SEC] },
   gauge: { name: "Gauge", icon: "Gauge", group: "Visual", size: [200, 200],
     props: { tag: "", label: "GAUGE", min: 0, max: 100, unit: "", decimals: 1, warn: 70, danger: 90, color: "#3B82F6" },
     fields: [TAG, f("label", "Label"), f("min", "Min", "number"), f("max", "Maks", "number"), f("unit", "Satuan"), f("decimals", "Desimal", "number"), f("warn", "Batas Warning", "number"), f("danger", "Batas Bahaya", "number"), f("color", "Warna", "color")] },
@@ -58,9 +70,32 @@ export const WIDGETS = {
   data_record: { name: "Data Record", icon: "Table", group: "Data", size: [520, 260],
     props: { title: "DATA RECORD", tags: [], rows: 20 },
     fields: [f("title", "Judul"), f("tags", "Tag (multi)", "tags"), f("rows", "Jumlah Baris", "number")] },
+  bit_button: { name: "Bit Button", icon: "ToggleLeft", group: "Tombol & Lampu", size: [140, 56],
+    props: { tag: "", read_tag: "", mode: "toggle", pulse_ms: 500, shape: "bevel3d", states: bitStates("OFF", "ON"), font_family: "Chivo", font_size: 15, min_level: 0 },
+    fields: [{ ...TAG, label: "Tag Tulis (Bit)" }, f("read_tag", "Tag Monitor (opsional)", "tag"), f("mode", "Tipe Bit", "select", { options: [["set_on", "Set ON"], ["set_off", "Set OFF"], ["momentary", "Momentary"], ["toggle", "Switch (Toggle)"]] }), f("pulse_ms", "Durasi Momentary (ms, 0 = selama ditekan)", "number"), f("shape", "Bentuk", "select", { options: BTN_SHAPES }), f("states", "State", "states", { bit: true }), ...FONT, SEC] },
+  word_button: { name: "Word Button", icon: "Binary", group: "Tombol & Lampu", size: [140, 56],
+    props: { tag: "", read_tag: "", mode: "cycle", value: 1, step: 1, min: 0, max: 100, caption: "", shape: "rounded", states: wordStates(), font_family: "Chivo", font_size: 15, min_level: 0 },
+    fields: [{ ...TAG, label: "Tag Tulis (Word)" }, f("read_tag", "Tag Monitor (opsional)", "tag"), f("mode", "Aksi Word", "select", { options: [["set_value", "Set Nilai Konstan"], ["increment", "Tambah (+step)"], ["decrement", "Kurang (-step)"], ["cycle", "Siklus State"]] }), f("value", "Nilai Konstan", "number"), f("step", "Step", "number"), f("min", "Min", "number"), f("max", "Maks", "number"), f("caption", "Teks Tetap (opsional)"), f("shape", "Bentuk", "select", { options: BTN_SHAPES }), f("states", "State (multi-state)", "states"), ...FONT, SEC] },
+  bit_lamp: { name: "Bit Lamp", icon: "Lightbulb", group: "Tombol & Lampu", size: [64, 64],
+    props: { tag: "", shape: "bezel_round", show_text: false, states: bitStates("OFF", "ON", "#1F2937", "#22C55E"), font_family: "Chivo", font_size: 12 },
+    fields: [{ ...TAG, label: "Tag (Bit)" }, f("shape", "Bentuk", "select", { options: LAMP_SHAPES }), f("show_text", "Tampilkan Teks", "bool"), f("states", "State", "states", { bit: true }), ...FONT] },
+  word_lamp: { name: "Word Lamp", icon: "Sun", group: "Tombol & Lampu", size: [120, 48],
+    props: { tag: "", shape: "led_bar", show_text: true, states: wordStates(), font_family: "Chivo", font_size: 13 },
+    fields: [{ ...TAG, label: "Tag (Word)" }, f("shape", "Bentuk", "select", { options: LAMP_SHAPES }), f("show_text", "Tampilkan Teks", "bool"), f("states", "State (multi-state)", "states"), ...FONT] },
+  char_display: { name: "Character Display", icon: "CaseSensitive", group: "Kontrol", size: [200, 56],
+    props: { tag: "", label: "TEKS", mode: "ascii", states: wordStates(), font_family: "Share Tech Mono", font_size: 22, color: "#FBBF24", bg: "#0F172A", align: "left" },
+    fields: [TAG, f("label", "Label"), f("mode", "Mode", "select", { options: [["ascii", "ASCII (karakter dari word)"], ["message", "Pesan per nilai (word)"]] }), f("_len", "Panjang Karakter", "charinfo"), f("states", "Daftar Pesan (mode pesan)", "states"), ...FONT, f("color", "Warna", "color"), f("bg", "Latar", "color"), f("align", "Rata", "select", { options: ["left", "center", "right"] })] },
+  func_button: { name: "Function Button", icon: "SquareArrowOutUpRight", group: "Tombol & Lampu", size: [150, 48],
+    props: { text: "BUKA LAYAR", action: "open_screen", screen_id: "", shape: "rounded", bg: "#2563EB", color: "#FFFFFF", font_family: "Chivo", font_size: 14, min_level: 0 },
+    fields: [f("text", "Teks"), f("action", "Fungsi", "select", { options: [["open_screen", "Open Screen"], ["open_subscreen", "Open Subscreen (popup)"], ["previous", "Previous Screen"], ["next", "Next Screen"], ["close_subscreen", "Close Subscreen"]] }), f("screen_id", "Layar Tujuan", "screen"), f("shape", "Bentuk", "select", { options: BTN_SHAPES }), f("bg", "Warna", "color"), f("color", "Warna Teks", "color"), ...FONT, SEC] },
+  ...Object.fromEntries([["pump", "Pompa", "Fan"], ["valve", "Valve", "Merge"], ["motor", "Motor", "Cog"], ["conveyor", "Konveyor", "ArrowRightLeft"], ["fan", "Kipas / Blower", "Wind"]].map(([s, name, icon]) => [`sym_${s}`, {
+    name, icon, group: "Simbol Industri", size: s === "conveyor" ? [200, 90] : [90, 100],
+    props: { symbol: s, tag: "", tag_mode: "bit", animate: true, show_label: true, label: "", states: bitStates("STOP", "RUN", "#64748B", "#22C55E") },
+    fields: [TAG, f("tag_mode", "Mode Tag", "select", { options: [["bit", "Bit (ON/OFF)"], ["word", "Word (multi-state)"]] }), f("animate", "Animasi saat aktif", "bool"), f("show_label", "Tampilkan Label", "bool"), f("label", "Label Tetap (opsional)"), f("states", "State Warna", "states", { bitKey: "tag_mode" })],
+  }])),
 };
 
-export const GROUPS = ["Dasar", "Kontrol", "Visual", "Data"];
+export const GROUPS = ["Dasar", "Tombol & Lampu", "Kontrol", "Simbol Industri", "Visual", "Data"];
 
 export function newWidget(type, x, y) {
   const def = WIDGETS[type];

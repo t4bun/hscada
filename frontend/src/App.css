@@ -32,3 +32,10 @@
 .hmi-scroll::-webkit-scrollbar-track { background: transparent; }
 
 .hmi-range { height: 6px; cursor: pointer; }
+
+@keyframes hmi-spin { to { transform: rotate(360deg); } }
+.hmi-spin { animation: hmi-spin 1.4s linear infinite; }
+.hmi-spin-fast { animation: hmi-spin 0.6s linear infinite; }
+@keyframes hmi-belt { to { stroke-dashoffset: -22; } }
+.hmi-belt { animation: hmi-belt 0.6s linear infinite; }
+.hmi-belt-rev { animation: hmi-belt 0.6s linear infinite reverse; }

@@ -11,24 +11,33 @@ PROTOCOLS = {
     "haiwell": {"label": "Haiwell (Modbus TCP)", "family": "modbus", "port": 502},
     "weintek": {"label": "Weintek (Modbus TCP)", "family": "modbus", "port": 502},
     "modbus_tcp": {"label": "Modbus TCP Generic", "family": "modbus", "port": 502},
+    "modbus_rtu": {"label": "Modbus RTU RS485 (Serial)", "family": "modbus", "port": 0, "serial": True},
+    "modbus_rtu_tcp": {"label": "Modbus RTU over TCP (Gateway RS485)", "family": "modbus", "port": 502},
+    "internal": {"label": "SCADA Internal Memory (LB/LW)", "family": "internal", "port": 0},
 }
 
 TYPE_SIZE = {"BOOL": 1, "INT16": 2, "UINT16": 2, "INT32": 4, "UINT32": 4, "FLOAT32": 4}
 TYPE_FMT = {"INT16": ">h", "UINT16": ">H", "INT32": ">i", "UINT32": ">I", "FLOAT32": ">f"}
+BYTE_ORDERS = {"ABCD": (0, 1, 2, 3), "CDAB": (2, 3, 0, 1), "BADC": (1, 0, 3, 2), "DCBA": (3, 2, 1, 0)}
 
 
-def decode_bytes(dtype: str, data: bytes, word_swap: bool = False):
-    if TYPE_SIZE[dtype] == 4 and word_swap:
-        data = data[2:4] + data[0:2]
-    return struct.unpack(TYPE_FMT[dtype], data[: TYPE_SIZE[dtype]])[0]
-
-
-def encode_bytes(dtype: str, value, word_swap: bool = False) -> bytes:
-    v = float(value) if dtype == "FLOAT32" else int(value)
-    data = struct.pack(TYPE_FMT[dtype], v)
-    if len(data) == 4 and word_swap:
-        data = data[2:4] + data[0:2]
+def reorder(data: bytes, order: str) -> bytes:
+    order = order or "ABCD"
+    if len(data) == 4:
+        return bytes(data[i] for i in BYTE_ORDERS.get(order, BYTE_ORDERS["ABCD"]))
+    if len(data) == 2 and order in ("BADC", "DCBA"):
+        return data[1:2] + data[0:1]
     return data
+
+
+def decode_bytes(dtype: str, data: bytes, order: str = "ABCD"):
+    data = reorder(bytes(data[: TYPE_SIZE[dtype]]), order)
+    return struct.unpack(TYPE_FMT[dtype], data)[0]
+
+
+def encode_bytes(dtype: str, value, order: str = "ABCD") -> bytes:
+    v = float(value) if dtype == "FLOAT32" else int(value)
+    return reorder(struct.pack(TYPE_FMT[dtype], v), order)
 
 
 # ---------------- Siemens S7 (snap7) ----------------
@@ -57,6 +66,7 @@ class S7Driver:
         import snap7
         self.snap7 = snap7
         self.dev = dev
+        self.order = dev.get("_order") or "ABCD"
         self.client = snap7.client.Client()
 
     def connect(self):
@@ -73,7 +83,7 @@ class S7Driver:
         data = self.client.read_area(self._area(p["area"]), p["db"], p["start"], TYPE_SIZE[dtype])
         if dtype == "BOOL":
             return bool((data[0] >> p["bit"]) & 1)
-        return decode_bytes(dtype, bytes(data))
+        return decode_bytes(dtype, bytes(data), self.order)
 
     def write(self, address, dtype, value):
         self.connect()
@@ -84,7 +94,7 @@ class S7Driver:
             data[0] = (data[0] | (1 << p["bit"])) if value else (data[0] & ~(1 << p["bit"]))
             self.client.write_area(area, p["db"], p["start"], data)
         else:
-            self.client.write_area(area, p["db"], p["start"], bytearray(encode_bytes(dtype, value)))
+            self.client.write_area(area, p["db"], p["start"], bytearray(encode_bytes(dtype, value, self.order)))
 
     def close(self):
         try:
@@ -117,11 +127,20 @@ def parse_modbus(address: str):
 
 class ModbusDriver:
     def __init__(self, dev):
-        from pymodbus.client import ModbusTcpClient
+        from pymodbus import FramerType
+        from pymodbus.client import ModbusTcpClient, ModbusSerialClient
         self.dev = dev
         self.unit = int(dev.get("unit_id") or 1)
-        self.swap = bool(dev.get("word_swap"))
-        self.client = ModbusTcpClient(dev["host"], port=int(dev.get("port") or 502), timeout=2)
+        self.swap = dev.get("_order") or "ABCD"
+        if dev["protocol"] == "modbus_rtu":
+            self.client = ModbusSerialClient(
+                port=dev.get("serial_port") or "/dev/ttyUSB0", baudrate=int(dev.get("baudrate") or 9600),
+                bytesize=int(dev.get("databits") or 8), parity=(dev.get("parity") or "N")[0], stopbits=int(dev.get("stopbits") or 1),
+                timeout=1, retries=1)
+        elif dev["protocol"] == "modbus_rtu_tcp":
+            self.client = ModbusTcpClient(dev["host"], port=int(dev.get("port") or 502), framer=FramerType.RTU, timeout=2)
+        else:
+            self.client = ModbusTcpClient(dev["host"], port=int(dev.get("port") or 502), timeout=2)
 
     def connect(self):
         if not self.client.connected and not self.client.connect():
@@ -187,6 +206,7 @@ def parse_fins(address: str):
 class FinsDriver:
     def __init__(self, dev):
         self.dev = dev
+        self.order = dev.get("_order") or "CDAB"
         self.sock = None
         self.sid = 0
 
@@ -223,7 +243,7 @@ class FinsDriver:
         data = self._cmd(b"\x01\x01" + bytes([word]) + struct.pack(">HBH", p["addr"], 0, count))
         if dtype == "BOOL":
             return bool(struct.unpack(">H", data[:2])[0] & 1)
-        return decode_bytes(dtype, data, True)
+        return decode_bytes(dtype, data, self.order)
 
     def write(self, address, dtype, value):
         self.connect()
@@ -232,7 +252,7 @@ class FinsDriver:
         if dtype == "BOOL":
             self._cmd(b"\x01\x02" + bytes([bitcode]) + struct.pack(">HBH", p["addr"], p["bit"] or 0, 1) + bytes([1 if value else 0]))
             return
-        data = encode_bytes(dtype, value, True)
+        data = encode_bytes(dtype, value, self.order)
         self._cmd(b"\x01\x02" + bytes([word]) + struct.pack(">HBH", p["addr"], 0, len(data) // 2) + data)
 
     def close(self):
@@ -246,6 +266,33 @@ def make_driver(dev):
     return {"s7": S7Driver, "modbus": ModbusDriver, "fins": FinsDriver}[family](dev)
 
 
+def parse_internal(address: str):
+    m = re.match(r"^(LB|LW)(\d+)(?:\.(\d+))?$", address.strip().upper())
+    if not m:
+        raise ValueError(f"Alamat internal tidak valid: {address} (gunakan LB0 / LW0)")
+    return {"area": m.group(1), "addr": int(m.group(2))}
+
+
 def validate_address(protocol: str, address: str):
     family = PROTOCOLS[protocol]["family"]
-    {"s7": parse_s7, "modbus": parse_modbus, "fins": parse_fins}[family](address)
+    {"s7": parse_s7, "modbus": parse_modbus, "fins": parse_fins, "internal": parse_internal}[family](address)
+
+
+def infer_type(protocol: str, address: str) -> str:
+    family = PROTOCOLS[protocol]["family"]
+    a = address.strip().upper().lstrip("%")
+    if family == "s7":
+        if ".DBX" in a or re.match(r"^[MIQEAV]X?\d+\.\d$", a):
+            return "BOOL"
+        if re.search(r"(DBD|^[MIQEAV]D)\d", a):
+            return "INT32"
+        return "INT16"
+    if family == "modbus":
+        try:
+            p = parse_modbus(a)
+        except ValueError:
+            return "INT16"
+        return "BOOL" if p["kind"] in ("coil", "di") or p["bit"] is not None else "INT16"
+    if family == "internal":
+        return "BOOL" if a.startswith("LB") else "INT16"
+    return "BOOL" if "." in a else "INT16"

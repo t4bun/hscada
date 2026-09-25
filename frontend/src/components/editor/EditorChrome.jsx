@@ -57,7 +57,7 @@ export const ScreenTabs = ({ screens, active, onSelect, onAdd }) => (
   </div>
 );
 
-const STATUS_CLR = { online: "text-emerald-400", simulasi: "text-cyan-400", offline: "text-red-400", menunggu: "text-slate-500" };
+const STATUS_CLR = { online: "text-emerald-400", simulasi: "text-cyan-400", internal: "text-violet-300", offline: "text-red-400", menunggu: "text-slate-500" };
 
 export const StatusBar = ({ devices, live, widgets, tags }) => (
   <footer className="h-7 flex items-center gap-4 px-3 border-t border-slate-800 bg-[#111827] text-[10px] font-mono text-slate-500 shrink-0" data-testid="editor-status-bar">

@@ -26,10 +26,25 @@ class Engine:
         self.devices = {}
         self.tags = []
         self.tick = 0
+        self.proj_order = {}
+        self.loaded_internal = False
+
+    def with_order(self, dev):
+        return {**dev, "_order": dev.get("byte_order") or self.proj_order.get(dev["project_id"], "ABCD")}
+
+    @staticmethod
+    def is_internal(dev):
+        return dev.get("protocol") == "internal"
 
     async def load_config(self):
         self.devices = {d["id"]: d for d in await self.db.devices.find({}, {"_id": 0}).to_list(5000)}
         self.tags = await self.db.tags.find({}, {"_id": 0}).to_list(50000)
+        self.proj_order = {p["id"]: (p.get("settings") or {}).get("byte_order") or "ABCD"
+                           async for p in self.db.projects.find({}, {"_id": 0, "id": 1, "settings": 1})}
+        if not self.loaded_internal:
+            async for m in self.db.internal_values.find({}, {"_id": 0}):
+                self.written.setdefault(m["tag_id"], m["v"])
+            self.loaded_internal = True
         if not self.active_alarms:
             async for a in self.db.alarms.find({"active": True}, {"_id": 0, "id": 1, "tag_id": 1, "level": 1}):
                 self.active_alarms[a["tag_id"]] = (a["id"], a["level"])
@@ -70,7 +85,8 @@ class Engine:
         return clamp_value(dt, int(tag.get("decimals") or 0), v)
 
     def _read_device(self, dev, tags):
-        sig = (dev["protocol"], dev.get("host"), dev.get("port"), dev.get("rack"), dev.get("slot"), dev.get("unit_id"), dev.get("word_swap"))
+        dev = self.with_order(dev)
+        sig = tuple(dev.get(k) for k in ("protocol", "host", "port", "rack", "slot", "unit_id", "_order", "serial_port", "baudrate", "parity", "databits", "stopbits"))
         cur = self.drivers.get(dev["id"])
         if not cur or cur[0] != sig:
             if cur:
@@ -99,6 +115,11 @@ class Engine:
         for dev_id, tags in by_dev.items():
             dev = self.devices[dev_id]
             pv = self.values.setdefault(dev["project_id"], {})
+            if self.is_internal(dev):
+                for tag in tags:
+                    pv[tag["id"]] = self.written.get(tag["id"], False if tag["data_type"] == "BOOL" else 0)
+                self.dev_status[dev_id] = {"status": "internal", "error": None}
+                continue
             if dev.get("simulate", True):
                 for tag in tags:
                     pv[tag["id"]] = self.sim_value(tag, t)
@@ -163,12 +184,15 @@ class Engine:
         dev = await self.db.devices.find_one({"id": tag["device_id"]}, {"_id": 0})
         if not dev:
             raise ValueError("Perangkat tidak ditemukan")
-        if dev.get("simulate", True):
+        if self.is_internal(dev):
+            self.written[tag["id"]] = v
+            await self.db.internal_values.update_one({"tag_id": tag["id"]}, {"$set": {"v": v}}, upsert=True)
+        elif dev.get("simulate", True):
             self.written[tag["id"]] = v
             self.walk[tag["id"]] = v
         else:
             raw = v if dt in ("BOOL", "FLOAT32") else to_raw(dt, dec, v)
-            drv = make_driver(dev)
+            drv = make_driver(self.with_order(dev))
             try:
                 await asyncio.wait_for(asyncio.to_thread(drv.write, tag["address"], dt, raw), timeout=6)
             finally:

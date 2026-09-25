@@ -18,7 +18,7 @@ export default function Editor() {
   const [tags, setTags] = useState([]);
   const [devices, setDevices] = useState([]);
   const [screenId, setScreenId] = useState(null);
-  const [sel, setSel] = useState(null);
+  const [sel, setSel] = useState([]);
   const [zoom, setZoom] = useState(0.75);
   const [grid, setGrid] = useState(true);
   const [snap, setSnap] = useState(true);
@@ -68,20 +68,58 @@ export default function Editor() {
   };
 
   const screen = project?.screens.find((s) => s.id === screenId) || project?.screens[0];
-  const widget = screen?.widgets.find((w) => w.id === sel);
+  const selWidgets = screen?.widgets.filter((w) => sel.includes(w.id)) || [];
+  const widget = sel.length === 1 ? selWidgets[0] : null;
   const setWidgets = (fn, commit = true) =>
     mutate((p) => ({ screens: p.screens.map((s) => (s.id === screen.id ? { ...s, widgets: fn(s.widgets) } : s)) }), commit);
   const updateWidget = (wid, patch, commit = true) => setWidgets((ws) => ws.map((w) => (w.id === wid ? { ...w, ...patch } : w)), commit);
-  const addWidget = (w) => { setWidgets((ws) => [...ws, w]); setSel(w.id); };
+  const updateMany = (map, commit = true) => setWidgets((ws) => ws.map((w) => (map[w.id] ? { ...w, ...map[w.id] } : w)), commit);
+  const addMany = (list) => { setWidgets((ws) => [...ws, ...list]); setSel(list.map((w) => w.id)); };
+  const addWidget = (w) => addMany([w]);
   const addType = (type) => addWidget(newWidget(type, project.width / 2 - 80, project.height / 2 - 40));
+  const cloneList = (list, off = 20) => {
+    const gmap = {};
+    return JSON.parse(JSON.stringify(list)).map((w) => ({
+      ...w, id: crypto.randomUUID(), x: w.x + off, y: w.y + off,
+      group: w.group ? (gmap[w.group] ||= crypto.randomUUID()) : undefined,
+    }));
+  };
 
-  const action = (a, wid = sel) => {
-    const w = screen.widgets.find((x) => x.id === wid);
-    if (!w) return;
-    if (a === "delete") { setWidgets((ws) => ws.filter((x) => x.id !== wid)); setSel(null); }
-    if (a === "duplicate") addWidget({ ...JSON.parse(JSON.stringify(w)), id: crypto.randomUUID(), x: w.x + 20, y: w.y + 20 });
-    if (a === "front") setWidgets((ws) => [...ws.filter((x) => x.id !== wid), w]);
-    if (a === "back") setWidgets((ws) => [w, ...ws.filter((x) => x.id !== wid)]);
+  const action = (a) => {
+    if (!selWidgets.length) return;
+    if (a === "delete") { setWidgets((ws) => ws.filter((x) => !sel.includes(x.id))); setSel([]); }
+    if (a === "duplicate") addMany(cloneList(selWidgets));
+    if (a === "front") setWidgets((ws) => [...ws.filter((x) => !sel.includes(x.id)), ...selWidgets]);
+    if (a === "back") setWidgets((ws) => [...selWidgets, ...ws.filter((x) => !sel.includes(x.id))]);
+  };
+
+  const align = (k) => {
+    const ref = selWidgets.find((w) => w.id === sel[sel.length - 1]);
+    if (!ref) return;
+    const map = {};
+    const put = (w, patch) => { map[w.id] = { ...(map[w.id] || {}), ...patch }; };
+    if (k === "group" || k === "ungroup") {
+      const g = k === "group" ? crypto.randomUUID() : undefined;
+      selWidgets.forEach((w) => put(w, { group: g }));
+      toast(k === "group" ? `${selWidgets.length} widget digrupkan` : "Grup dilepas");
+    } else if (k === "dist_h" || k === "dist_v") {
+      const [pos, size] = k === "dist_h" ? ["x", "w"] : ["y", "h"];
+      const s = [...selWidgets].sort((a, b) => a[pos] - b[pos]);
+      if (s.length < 3) return toast("Pilih minimal 3 widget untuk distribusi");
+      const gap = (s[s.length - 1][pos] + s[s.length - 1][size] - s[0][pos] - s.reduce((t, w) => t + w[size], 0)) / (s.length - 1);
+      let cur = s[0][pos];
+      s.forEach((w) => { put(w, { [pos]: Math.round(cur) }); cur += w[size] + gap; });
+    } else {
+      selWidgets.forEach((w) => {
+        const f = {
+          left: { x: ref.x }, right: { x: ref.x + ref.w - w.w }, hcenter: { x: Math.round(ref.x + ref.w / 2 - w.w / 2) },
+          top: { y: ref.y }, bottom: { y: ref.y + ref.h - w.h }, vcenter: { y: Math.round(ref.y + ref.h / 2 - w.h / 2) },
+          same_w: { w: ref.w }, same_h: { h: ref.h }, same_size: { w: ref.w, h: ref.h },
+        }[k];
+        if (f) put(w, f);
+      });
+    }
+    updateMany(map);
   };
 
   const save = async () => {
@@ -97,12 +135,12 @@ export default function Editor() {
   const addScreen = () => {
     const s = { id: crypto.randomUUID(), name: `Layar ${project.screens.length + 1}`, bg_color: "#0B0F17", bg_image: "", widgets: [] };
     mutate((p) => ({ screens: [...p.screens, s] }));
-    setScreenId(s.id); setSel(null);
+    setScreenId(s.id); setSel([]);
   };
   const deleteScreen = () => {
     const rest = project.screens.filter((s) => s.id !== screen.id);
     mutate(() => ({ screens: rest }));
-    setScreenId(rest[0].id); setSel(null);
+    setScreenId(rest[0].id); setSel([]);
   };
 
   useEffect(() => {
@@ -112,16 +150,18 @@ export default function Editor() {
       if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); save().catch(() => {}); return; }
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); travel(e.shiftKey ? 1 : -1); return; }
       if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); travel(1); return; }
-      if (mod && e.key.toLowerCase() === "v" && clip.current) { e.preventDefault(); addWidget({ ...JSON.parse(clip.current), id: crypto.randomUUID() }); return; }
-      if (!widget) return;
+      if (mod && e.key.toLowerCase() === "v" && clip.current) { e.preventDefault(); addMany(cloneList(JSON.parse(clip.current))); return; }
+      if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); setSel(screen.widgets.map((w) => w.id)); return; }
+      if (!selWidgets.length) return;
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); action("delete"); }
       else if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); action("duplicate"); }
-      else if (mod && e.key.toLowerCase() === "c") { const c = JSON.parse(JSON.stringify(widget)); c.x += 20; c.y += 20; clip.current = JSON.stringify(c); }
+      else if (mod && e.key.toLowerCase() === "g") { e.preventDefault(); align(e.shiftKey ? "ungroup" : "group"); }
+      else if (mod && e.key.toLowerCase() === "c") { clip.current = JSON.stringify(selWidgets); }
       else if (e.key.startsWith("Arrow")) {
         e.preventDefault();
         const st = e.shiftKey ? 10 : 1;
         const d = { ArrowLeft: [-st, 0], ArrowRight: [st, 0], ArrowUp: [0, -st], ArrowDown: [0, st] }[e.key];
-        updateWidget(widget.id, { x: widget.x + d[0], y: widget.y + d[1] });
+        updateMany(Object.fromEntries(selWidgets.map((w) => [w.id, { x: w.x + d[0], y: w.y + d[1] }])));
       }
     };
     window.addEventListener("keydown", onKey);
@@ -150,20 +190,23 @@ export default function Editor() {
           onPreview={async () => { const w = window.open("about:blank", "_blank"); await save().catch(() => {}); if (w) w.location = `/preview/${id}`; }}
           onPublish={() => setPublishOpen(true)}
         />
-        <ScreenTabs screens={project.screens} active={screen.id} onSelect={(sid) => { setScreenId(sid); setSel(null); }} onAdd={addScreen} />
+        <ScreenTabs screens={project.screens} active={screen.id} onSelect={(sid) => { setScreenId(sid); setSel([]); }} onAdd={addScreen} />
         <div className="flex flex-1 min-h-0">
           <Palette onAdd={addType} />
-          <main className="flex-1 overflow-auto bg-[#090D14] hmi-scroll hmi-dots p-10 flex" onPointerDown={() => setSel(null)}>
+          <main className="flex-1 overflow-auto bg-[#090D14] hmi-scroll hmi-dots p-10 flex" onPointerDown={() => setSel([])}>
             <div className="m-auto">
               <Canvas
-                screen={screen} width={project.width} height={project.height} zoom={zoom} grid={grid} snap={snap}
-                selectedId={sel} onSelect={setSel} onAdd={addWidget}
-                onChange={(wid, patch) => updateWidget(wid, patch, false)} onCommit={() => setTimeout(pushHist, 0)}
+                screen={screen} zoom={zoom} grid={grid} snap={snap}
+                width={screen.type === "popup" ? screen.popup_width || 480 : project.width}
+                height={screen.type === "popup" ? screen.popup_height || 320 : project.height}
+                selected={sel} onSelect={setSel} onAdd={addWidget}
+                onChange={(map) => updateMany(map, false)} onCommit={() => setTimeout(pushHist, 0)}
               />
             </div>
           </main>
           <Inspector
             widget={widget} screen={screen} project={project}
+            multi={sel.length > 1 ? { count: sel.length, grouped: selWidgets.some((w) => w.group), onAlign: align } : null}
             ctx={{ tags, screens: project.screens, fonts: project.fonts || [] }}
             onProps={(patch) => updateWidget(widget.id, { props: { ...widget.props, ...patch } })}
             onGeom={(patch) => updateWidget(widget.id, patch)}

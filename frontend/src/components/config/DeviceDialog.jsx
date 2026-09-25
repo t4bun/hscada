@@ -17,9 +17,10 @@ export const ADDRESS_HINT = {
   s7: "Contoh: DB1.DBW0, DB1.DBD4, DB1.DBX0.0, MW10, MD20, M0.0, I0.0, Q0.1, VW100 (S7-200 → DB1)",
   modbus: "Contoh: 40001 (Holding), 30001 (Input Reg), 00001 (Coil), 10001 (DI), 40001.3 (bit), HR0 / C0 (0-based)",
   fins: "Contoh: D100, D100.05, CIO10.0, W5, H3",
+  internal: "Memori SCADA: LB0 (bit), LW0 (word 16-bit), LW10 + tipe 32-bit (2 word)",
 };
 
-const EMPTY = { name: "", protocol: "s7_1200_1500", host: "192.168.0.1", port: null, rack: 0, slot: 1, unit_id: 1, word_swap: false, simulate: true };
+const EMPTY = { name: "", protocol: "s7_1200_1500", host: "192.168.0.1", port: null, rack: 0, slot: 1, unit_id: 1, word_swap: false, simulate: true, byte_order: "", serial_port: "/dev/ttyUSB0", baudrate: 9600, databits: 8, parity: "N", stopbits: 1 };
 
 export const DeviceDialog = ({ open, onOpenChange, projectId, device, protocols, onSaved }) => {
   const [f, setF] = useState(EMPTY);
@@ -28,7 +29,7 @@ export const DeviceDialog = ({ open, onOpenChange, projectId, device, protocols,
   const set = (k) => (e) => setF({ ...f, [k]: e?.target ? (e.target.type === "number" ? Number(e.target.value) : e.target.value) : e });
   const pickProto = (e) => {
     const p = protocols[e.target.value];
-    setF({ ...f, protocol: e.target.value, port: p.port, rack: p.rack ?? f.rack, slot: p.slot ?? f.slot });
+    setF({ ...f, protocol: e.target.value, port: p.port, rack: p.rack ?? f.rack, slot: p.slot ?? f.slot, byte_order: p.family === "fins" ? "CDAB" : "", simulate: p.family === "internal" ? false : f.simulate });
   };
   const submit = async (e) => {
     e.preventDefault();
@@ -51,25 +52,44 @@ export const DeviceDialog = ({ open, onOpenChange, projectId, device, protocols,
                 {Object.entries(protocols).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}
               </select>
             </L>
-            <L label="IP Address"><input data-testid="device-host-input" className={inputCls} value={f.host} onChange={set("host")} /></L>
-            <L label="Port"><input data-testid="device-port-input" type="number" className={inputCls} value={f.port ?? proto.port ?? ""} onChange={set("port")} /></L>
+            {proto.serial ? <>
+              <L label="COM / Serial Port"><input data-testid="device-serial-input" className={inputCls} value={f.serial_port} onChange={set("serial_port")} placeholder="/dev/ttyUSB0 atau COM3" /></L>
+              <L label="Baudrate">
+                <select data-testid="device-baud-select" className={inputCls} value={f.baudrate} onChange={(e) => setF({ ...f, baudrate: Number(e.target.value) })}>
+                  {[1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200].map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </L>
+              <L label="Data Bits"><select className={inputCls} value={f.databits} onChange={(e) => setF({ ...f, databits: Number(e.target.value) })}>{[7, 8].map((b) => <option key={b}>{b}</option>)}</select></L>
+              <L label="Parity"><select data-testid="device-parity-select" className={inputCls} value={f.parity} onChange={set("parity")}><option value="N">None</option><option value="E">Even</option><option value="O">Odd</option></select></L>
+              <L label="Stop Bits"><select className={inputCls} value={f.stopbits} onChange={(e) => setF({ ...f, stopbits: Number(e.target.value) })}>{[1, 2].map((b) => <option key={b}>{b}</option>)}</select></L>
+            </> : proto.family !== "internal" && <>
+              <L label="IP Address"><input data-testid="device-host-input" className={inputCls} value={f.host} onChange={set("host")} /></L>
+              <L label="Port"><input data-testid="device-port-input" type="number" className={inputCls} value={f.port ?? proto.port ?? ""} onChange={set("port")} /></L>
+            </>}
+            {proto.family !== "internal" && (
+              <L label="Byte Order (32-bit)">
+                <select data-testid="device-byteorder-select" className={inputCls} value={f.byte_order} onChange={set("byte_order")}>
+                  <option value="">Ikuti pengaturan proyek</option>
+                  {["ABCD", "CDAB", "BADC", "DCBA"].map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </L>
+            )}
             {proto.family === "s7" && <>
               <L label="Rack"><input data-testid="device-rack-input" type="number" className={inputCls} value={f.rack} onChange={set("rack")} /></L>
               <L label="Slot"><input data-testid="device-slot-input" type="number" className={inputCls} value={f.slot} onChange={set("slot")} /></L>
             </>}
             {proto.family === "modbus" && <>
               <L label="Unit / Station ID"><input data-testid="device-unit-input" type="number" className={inputCls} value={f.unit_id} onChange={set("unit_id")} /></L>
-              <L label="Word Swap (32-bit)"><div className="h-9 flex items-center"><Switch data-testid="device-wordswap-switch" checked={f.word_swap} onCheckedChange={set("word_swap")} /></div></L>
             </>}
           </div>
           <p className="text-[11px] text-slate-500 font-mono bg-[#0B0F17] border border-slate-800 p-2 rounded-sm">{ADDRESS_HINT[proto.family]}</p>
-          <div className="flex items-center justify-between border border-slate-800 bg-[#0B0F17] p-3 rounded-sm">
+          {proto.family !== "internal" && (<div className="flex items-center justify-between border border-slate-800 bg-[#0B0F17] p-3 rounded-sm">
             <div>
               <p className="text-sm font-medium">Mode Simulator</p>
               <p className="text-xs text-slate-500">Nilai tag disimulasikan. Matikan untuk koneksi PLC asli (PLC harus bisa dijangkau dari server).</p>
             </div>
             <Switch data-testid="device-simulate-switch" checked={f.simulate} onCheckedChange={set("simulate")} />
-          </div>
+          </div>)}
           <button data-testid="device-save-btn" className="w-full h-10 bg-blue-600 hover:bg-blue-700 rounded-sm text-sm font-semibold">Simpan Perangkat</button>
         </form>
       </DialogContent>

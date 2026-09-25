@@ -5,9 +5,13 @@ export const API = `${BACKEND_URL}/api`;
 
 export const api = axios.create({ baseURL: API, withCredentials: true });
 
+let clientToken = null;
+export const setClientToken = (t) => { clientToken = t; };
+
 api.interceptors.request.use((cfg) => {
   const t = localStorage.getItem("hmi_token");
   if (t) cfg.headers.Authorization = `Bearer ${t}`;
+  if (clientToken) cfg.headers["X-Client-Token"] = clientToken;
   return cfg;
 });
 

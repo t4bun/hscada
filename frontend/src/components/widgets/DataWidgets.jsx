@@ -133,7 +133,7 @@ export const DataRecord = ({ p }) => {
 const LEVEL_CLS = { HH: "bg-red-600 text-white", LL: "bg-red-600 text-white", H: "bg-amber-500 text-black", L: "bg-amber-500 text-black", ON: "bg-red-500 text-white" };
 
 export const AlarmTable = ({ p }) => {
-  const { base, mode, allowOperate } = useRt();
+  const { base, mode, allowOperate, canAck } = useRt();
   const [rows, setRows] = useState([]);
   const [bump, setBump] = useState(0);
   usePolling(async (alive) => {
@@ -143,7 +143,7 @@ export const AlarmTable = ({ p }) => {
       if (alive()) setRows(data);
     } catch { /* ignore */ }
   }, [base, p.active_only, bump], 2000);
-  const can = mode === "run" && allowOperate;
+  const can = mode === "run" && (canAck ?? allowOperate);
   const ack = async (id) => { await api.post(`${base}/alarms/ack`, { alarm_id: id || null }).catch(() => {}); setBump((b) => b + 1); };
   const right = can && <button data-testid="alarm-ack-all" onClick={() => ack()} className="text-[10px] font-mono text-slate-300 hover:text-white border border-slate-600 px-1.5 rounded-sm">ACK SEMUA</button>;
   return (

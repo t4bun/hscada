@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { api, errMsg } from "@/lib/api";
 import { DATA_TYPES, TYPE_SPEC, specFor, defaultDecimals } from "@/lib/format";
+import { inferType } from "@/lib/address";
 import { inputCls, L, ADDRESS_HINT } from "./DeviceDialog";
 
 const EMPTY = {
@@ -13,18 +14,28 @@ const EMPTY = {
 };
 const H = ({ children }) => <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400 pt-2">{children}</p>;
 
-export const TagDialog = ({ open, onOpenChange, projectId, tag, devices, protocols, onSaved }) => {
+export const TagDialog = ({ open, onOpenChange, projectId, tag, preset, devices, protocols, onSaved }) => {
   const [f, setF] = useState(EMPTY);
-  useEffect(() => { if (open) setF(tag ? { ...EMPTY, ...tag } : { ...EMPTY, device_id: devices[0]?.id || "" }); }, [open, tag, devices]);
+  const touched = useRef(false);
+  useEffect(() => {
+    if (!open) return;
+    touched.current = !!tag || !!preset?.data_type;
+    setF(tag ? { ...EMPTY, ...tag } : { ...EMPTY, device_id: devices[0]?.id || "", ...(preset || {}), decimals: defaultDecimals(preset?.data_type || "INT16") });
+  }, [open, tag, preset, devices]);
   const dev = devices.find((d) => d.id === f.device_id);
   const family = protocols[dev?.protocol]?.family;
   const sp = specFor(f.data_type, f.decimals);
   const isBool = f.data_type === "BOOL";
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e?.target ? e.target.value : e }));
   const num = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value === "" ? null : Number(e.target.value) }));
-  const pickType = (e) => {
-    const dt = e.target.value;
-    setF((s) => ({ ...s, data_type: dt, decimals: defaultDecimals(dt), sim_mode: dt === "BOOL" ? "static" : s.sim_mode === "toggle" ? "sine" : s.sim_mode }));
+  const typePatch = (dt, s) => ({ data_type: dt, decimals: defaultDecimals(dt), sim_mode: dt === "BOOL" ? "static" : s.sim_mode === "toggle" || s.sim_mode === "static" ? "sine" : s.sim_mode });
+  const pickType = (e) => { touched.current = true; const dt = e.target.value; setF((s) => ({ ...s, ...typePatch(dt, s) })); };
+  const setAddress = (e) => {
+    const address = e.target.value;
+    setF((s) => {
+      const dt = inferType(family, address);
+      return touched.current || dt === s.data_type ? { ...s, address } : { ...s, address, ...typePatch(dt, s) };
+    });
   };
   const submit = async (e) => {
     e.preventDefault();
@@ -47,7 +58,7 @@ export const TagDialog = ({ open, onOpenChange, projectId, tag, devices, protoco
               </select>
             </L>
             <div className="col-span-2">
-              <L label="Alamat PLC" hint={ADDRESS_HINT[family]}><input required data-testid="tag-address-input" className={`${inputCls} font-mono`} value={f.address} onChange={set("address")} /></L>
+              <L label="Alamat PLC" hint={`${ADDRESS_HINT[family] || ""} · Tipe data otomatis dari alamat`}><input required data-testid="tag-address-input" className={`${inputCls} font-mono`} value={f.address} onChange={setAddress} /></L>
             </div>
             <L label="Tipe Data">
               <select data-testid="tag-datatype-select" className={inputCls} value={f.data_type} onChange={pickType}>

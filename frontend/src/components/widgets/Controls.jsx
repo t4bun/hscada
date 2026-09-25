@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
 import { useRt } from "@/hooks/useLive";
 import { formatValue, specFor } from "@/lib/format";
+import { useCanOperate as useCanOp } from "./MultiState";
 
-const useCanOperate = () => {
-  const { mode, allowOperate } = useRt();
-  return mode === "run" && allowOperate;
-};
+const useCanOperate = (minLevel) => useCanOp(minLevel);
 
 export const ButtonW = ({ p }) => {
   const { values, write, gotoScreen } = useRt();
-  const can = useCanOperate();
+  const can = useCanOperate(p.min_level);
   const on = p.tag && !!values[p.tag];
   const click = () => {
     if (!can && p.action !== "goto") return;
@@ -39,7 +37,7 @@ export const ButtonW = ({ p }) => {
 
 export const SwitchW = ({ p }) => {
   const { values, write } = useRt();
-  const can = useCanOperate();
+  const can = useCanOperate(p.min_level);
   const on = !!values[p.tag];
   return (
     <button type="button" data-testid="hmi-switch" onClick={() => can && p.tag && write(p.tag, !on)} className="w-full h-full flex items-center gap-2 px-1">
@@ -93,7 +91,7 @@ export const Numeric = ({ p }) => {
 
 export const NumericInput = ({ p }) => {
   const { values, write } = useRt();
-  const can = useCanOperate();
+  const can = useCanOperate(p.min_level);
   const sp = specFor(p.data_type, p.decimals);
   const cur = formatValue(values[p.tag], p.data_type, p.decimals);
   const [draft, setDraft] = useState(null);
@@ -128,7 +126,7 @@ export const NumericInput = ({ p }) => {
 
 export const SliderW = ({ p }) => {
   const { values, write } = useRt();
-  const can = useCanOperate();
+  const can = useCanOperate(p.min_level);
   const v = Number(values[p.tag] ?? p.min);
   const [local, setLocal] = useState(null);
   return (

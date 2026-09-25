@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Upload, Trash2, ArrowUpToLine, ArrowDownToLine, Copy, Plus } from "lucide-react";
+import { Upload, Trash2, ArrowUpToLine, ArrowDownToLine, Copy, Plus, AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal, AlignHorizontalSpaceAround, AlignVerticalSpaceAround, Group, Ungroup } from "lucide-react";
 import { WIDGETS } from "@/components/widgets/registry";
 import { BUILTIN_FONTS, DATA_TYPES, TYPE_SPEC, specFor, defaultDecimals } from "@/lib/format";
 import { uploadFile, errMsg, assetUrl } from "@/lib/api";
@@ -44,6 +44,30 @@ const ImagePick = ({ value, onChange, testid }) => {
   );
 };
 
+const StatesEditor = ({ value, set, bit }) => {
+  const rows = bit ? [0, 1].map((i) => value[i] || { value: i, text: i ? "ON" : "OFF", bg: i ? "#16A34A" : "#334155", color: "#FFFFFF" }) : value;
+  const upd = (i, patch) => set(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  return (
+    <div className="space-y-1.5" data-testid="states-editor">
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center gap-1 bg-[#0B0F17] border border-slate-800 p-1 rounded-sm">
+          {bit ? <span className="w-9 text-[10px] font-mono text-slate-400 text-center">{i ? "ON" : "OFF"}</span>
+            : <input data-testid={`state-value-${i}`} type="number" className={`${inputCls} w-12 px-1`} value={r.value} onChange={(e) => upd(i, { value: Number(e.target.value) })} />}
+          <input data-testid={`state-text-${i}`} className={`${inputCls} flex-1 min-w-0 px-1`} value={r.text} onChange={(e) => upd(i, { text: e.target.value })} />
+          <input type="color" title="Warna latar" className="h-7 w-6 bg-transparent" value={/^#[0-9a-f]{6}$/i.test(r.bg) ? r.bg : "#334155"} onChange={(e) => upd(i, { bg: e.target.value })} />
+          <input type="color" title="Warna teks" className="h-7 w-6 bg-transparent" value={/^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#ffffff"} onChange={(e) => upd(i, { color: e.target.value })} />
+          <button type="button" title="Berkedip" onClick={() => upd(i, { blink: !r.blink })} className={`text-[9px] font-mono px-1 h-7 rounded-sm ${r.blink ? "bg-amber-500 text-black" : "bg-slate-800 text-slate-500"}`}>BLK</button>
+          {!bit && <button type="button" onClick={() => set(rows.filter((_, j) => j !== i))} className="text-slate-500 hover:text-red-400 px-0.5"><Trash2 size={12} /></button>}
+        </div>
+      ))}
+      {!bit && (
+        <button type="button" data-testid="state-add-btn" onClick={() => set([...rows, { value: rows.length ? Math.max(...rows.map((r) => Number(r.value))) + 1 : 0, text: `STATE ${rows.length}`, bg: "#2563EB", color: "#FFFFFF", blink: false }])}
+          className="w-full h-7 text-[11px] flex items-center justify-center gap-1 bg-slate-800 hover:bg-slate-700 rounded-sm text-slate-300"><Plus size={12} />Tambah State ({rows.length})</button>
+      )}
+    </div>
+  );
+};
+
 const Field = ({ f, value, set, ctx, widget }) => {
   const id = `prop-${f.key}`;
   switch (f.type) {
@@ -66,12 +90,24 @@ const Field = ({ f, value, set, ctx, widget }) => {
         {[...BUILTIN_FONTS, ...ctx.fonts.map((x) => x.name)].map((n) => <option key={n} value={n} style={{ fontFamily: n }}>{n}</option>)}
       </select>
     );
-    case "tag": return (
-      <select data-testid={id} className={inputCls} value={value || ""} onChange={(e) => set(e.target.value)}>
-        <option value="">— tanpa tag —</option>
-        {ctx.tags.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.data_type})</option>)}
-      </select>
-    );
+    case "tag": {
+      const cats = ["Bit", "Word", "DWord", "Float"];
+      return (
+        <select data-testid={id} className={inputCls} value={value || ""} onChange={(e) => set(e.target.value)}>
+          <option value="">— tanpa tag —</option>
+          {cats.map((c) => {
+            const list = ctx.tags.filter((t) => (t.category || "Word") === c);
+            return list.length ? <optgroup key={c} label={`${c} (${list.length})`}>{list.map((t) => <option key={t.id} value={t.id}>{t.name} · {t.address}</option>)}</optgroup> : null;
+          })}
+        </select>
+      );
+    }
+    case "states": return <StatesEditor value={value || []} set={set} bit={f.bit || (f.bitKey && widget.props[f.bitKey] !== "word")} />;
+    case "charinfo": {
+      const t = ctx.tags.find((x) => x.id === widget.props.tag);
+      const n = { BOOL: 1, INT16: 2, UINT16: 2, INT32: 4, UINT32: 4, FLOAT32: 4 }[t?.data_type] || 2;
+      return <p data-testid="char-len-info" className="text-[11px] font-mono bg-slate-800/70 px-2 py-1.5 rounded-sm text-slate-400">Auto: <b className="text-emerald-400">{n} karakter</b> ({t ? t.data_type : "16-bit default"}, 2 karakter / word)</p>;
+    }
     case "tags": return (
       <div className="max-h-36 overflow-y-auto border border-slate-700 rounded-sm p-1 space-y-0.5 hmi-scroll">
         {ctx.tags.map((t) => (
@@ -179,6 +215,18 @@ const ScreenProps = ({ screen, project, onScreen, onProject, onDeleteScreen, can
           <Field f={{ key: "bg_color", type: "color" }} value={screen.bg_color} set={(v) => onScreen({ bg_color: v })} ctx={{}} />
         </Row>
         <Row label="Gambar Latar"><ImagePick value={screen.bg_image} onChange={(v) => onScreen({ bg_image: v })} testid="screen-bg-upload" /></Row>
+        <Row label="Tipe Layar">
+          <select data-testid="screen-type-select" className={inputCls} value={screen.type || "main"} onChange={(e) => onScreen({ type: e.target.value, popup_width: screen.popup_width || 480, popup_height: screen.popup_height || 320 })}>
+            <option value="main">Layar Utama</option>
+            <option value="popup">Subscreen (Popup)</option>
+          </select>
+        </Row>
+        {screen.type === "popup" && (
+          <div className="grid grid-cols-2 gap-2">
+            <Row label="Lebar Popup"><input data-testid="popup-width-input" type="number" className={inputCls} value={screen.popup_width || 480} onChange={(e) => onScreen({ popup_width: Number(e.target.value) })} /></Row>
+            <Row label="Tinggi Popup"><input data-testid="popup-height-input" type="number" className={inputCls} value={screen.popup_height || 320} onChange={(e) => onScreen({ popup_height: Number(e.target.value) })} /></Row>
+          </div>
+        )}
         {canDelete && (
           <button data-testid="screen-delete-btn" onClick={onDeleteScreen} className="w-full h-8 text-xs flex items-center justify-center gap-1 bg-slate-800 hover:bg-red-800 rounded-sm text-slate-200"><Trash2 size={13} />Hapus Layar</button>
         )}
@@ -208,8 +256,44 @@ const ScreenProps = ({ screen, project, onScreen, onProject, onDeleteScreen, can
   );
 };
 
+const ALIGN = [
+  ["left", "Rata kiri", AlignStartVertical], ["hcenter", "Tengah horizontal", AlignCenterVertical], ["right", "Rata kanan", AlignEndVertical],
+  ["top", "Rata atas", AlignStartHorizontal], ["vcenter", "Tengah vertikal", AlignCenterHorizontal], ["bottom", "Rata bawah", AlignEndHorizontal],
+  ["dist_h", "Distribusi horizontal", AlignHorizontalSpaceAround], ["dist_v", "Distribusi vertikal", AlignVerticalSpaceAround],
+];
+
+const MultiPanel = ({ count, grouped, onAlign, onAction }) => (
+  <>
+    <Section title={`${count} widget terpilih`}>
+      <p className="text-[11px] text-slate-500">Acuan = item yang <b className="text-blue-400">terakhir diseleksi</b> (kotak biru tebal). Shift+klik untuk menambah/mengurangi seleksi, atau tarik kotak di kanvas.</p>
+    </Section>
+    <Section title="Rata & Distribusi">
+      <div className="grid grid-cols-4 gap-1">
+        {ALIGN.map(([k, t, I]) => <IconBtn key={k} t={t} testid={`align-${k}`} onClick={() => onAlign(k)}><I size={15} /></IconBtn>)}
+      </div>
+    </Section>
+    <Section title="Samakan Ukuran (dari acuan)">
+      <div className="grid grid-cols-3 gap-1">
+        {[["same_w", "Lebar"], ["same_h", "Tinggi"], ["same_size", "Keduanya"]].map(([k, l]) => (
+          <button key={k} data-testid={`size-${k}`} onClick={() => onAlign(k)} className="h-8 text-[11px] bg-slate-800 hover:bg-slate-700 rounded-sm text-slate-200">{l}</button>
+        ))}
+      </div>
+    </Section>
+    <Section title="Grup">
+      <div className="grid grid-cols-2 gap-1">
+        <button data-testid="group-btn" onClick={() => onAlign("group")} className="h-8 text-xs flex items-center justify-center gap-1 bg-slate-800 hover:bg-slate-700 rounded-sm"><Group size={13} />Group (Ctrl+G)</button>
+        <button data-testid="ungroup-btn" disabled={!grouped} onClick={() => onAlign("ungroup")} className="h-8 text-xs flex items-center justify-center gap-1 bg-slate-800 hover:bg-slate-700 rounded-sm disabled:opacity-40"><Ungroup size={13} />Ungroup</button>
+      </div>
+      <div className="flex gap-1">
+        <IconBtn t="Duplikat" testid="multi-duplicate-btn" onClick={() => onAction("duplicate")}><Copy size={14} /></IconBtn>
+        <IconBtn t="Hapus" testid="multi-delete-btn" danger onClick={() => onAction("delete")}><Trash2 size={14} /></IconBtn>
+      </div>
+    </Section>
+  </>
+);
+
 export const Inspector = (props) => (
   <aside className="w-80 border-l border-slate-800 bg-[#111827] shrink-0 overflow-y-auto hmi-scroll" data-testid="property-inspector">
-    {props.widget ? <WidgetProps {...props} /> : <ScreenProps {...props} />}
+    {props.multi ? <MultiPanel {...props.multi} onAction={props.onAction} /> : props.widget ? <WidgetProps {...props} /> : <ScreenProps {...props} />}
   </aside>
 );

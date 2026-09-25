@@ -6,13 +6,15 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Any
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from starlette.middleware.cors import CORSMiddleware
 
 from db import db, client
 from auth import hash_password, verify_password, set_auth_cookies, decode_token, get_current_user, create_token
-from drivers import PROTOCOLS, validate_address, make_driver
+from drivers import PROTOCOLS, validate_address, make_driver, infer_type
+from security import router as security_router, client_from_request
+from tag_import import parse_tag_file
 from engine import Engine
 from formats import TYPE_SPEC, spec_for
 from seed import create_demo_project
@@ -24,6 +26,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 api = APIRouter(prefix="/api")
 engine = Engine(db)
+DEFAULT_SETTINGS = {"byte_order": "ABCD", "initial_screen": "", "screen_saver_enabled": False, "screen_saver_minutes": 5, "security_enabled": False}
 
 
 def now_iso():
@@ -55,6 +58,7 @@ class ProjectUpdate(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     screens: Optional[List[dict]] = None
+    settings: Optional[dict] = None
     fonts: Optional[List[dict]] = None
 
 
@@ -71,6 +75,12 @@ class DeviceIn(BaseModel):
     slot: int = 1
     unit_id: int = 1
     word_swap: bool = False
+    byte_order: str = ""
+    serial_port: str = ""
+    baudrate: int = 9600
+    databits: int = 8
+    parity: str = "N"
+    stopbits: int = 1
     simulate: bool = True
 
 
@@ -167,8 +177,11 @@ async def owned_project(project_id: str, user: dict) -> dict:
     return p
 
 
+CATEGORY = {"BOOL": "Bit", "INT16": "Word", "UINT16": "Word", "INT32": "DWord", "UINT32": "DWord", "FLOAT32": "Float"}
+
+
 def tag_out(t: dict) -> dict:
-    return {**t, **{"max_chars": spec_for(t["data_type"], t.get("decimals", 0))["max_chars"]}}
+    return {**t, "max_chars": spec_for(t["data_type"], t.get("decimals", 0))["max_chars"], "category": CATEGORY[t["data_type"]]}
 
 
 async def project_tags(pid: str):
@@ -201,7 +214,7 @@ async def create_project(body: ProjectCreate, user=Depends(get_current_user)):
         "id": str(uuid.uuid4()), "owner_id": user["id"], "name": body.name, "description": body.description,
         "width": body.width, "height": body.height, "fonts": [],
         "screens": [{"id": str(uuid.uuid4()), "name": "Layar 1", "bg_color": "#0B0F17", "bg_image": "", "widgets": []}],
-        "published": False, "publish_slug": None, "allow_operate": True, "published_screens": None,
+        "published": False, "publish_slug": None, "allow_operate": True, "published_screens": None, "settings": dict(DEFAULT_SETTINGS),
         "created_at": now_iso(), "updated_at": now_iso(),
     }
     await db.projects.insert_one(dict(p))
@@ -212,6 +225,7 @@ async def create_project(body: ProjectCreate, user=Depends(get_current_user)):
 async def get_project(project_id: str, user=Depends(get_current_user)):
     p = await owned_project(project_id, user)
     p.pop("published_screens", None)
+    p["settings"] = {**DEFAULT_SETTINGS, **(p.get("settings") or {})}
     return p
 
 
@@ -309,9 +323,9 @@ async def delete_device(device_id: str, user=Depends(get_current_user)):
 @api.post("/devices/{device_id}/test")
 async def test_device(device_id: str, user=Depends(get_current_user)):
     d = await owned_device(device_id, user)
-    if d.get("simulate", True):
-        return {"ok": True, "message": "Mode simulasi aktif — tidak perlu koneksi fisik"}
-    drv = make_driver(d)
+    if d.get("simulate", True) or d["protocol"] == "internal":
+        return {"ok": True, "message": "Mode simulasi / memori internal — tidak perlu koneksi fisik"}
+    drv = make_driver(engine.with_order(d))
     try:
         await asyncio.wait_for(asyncio.to_thread(drv.connect), timeout=6)
         return {"ok": True, "message": f"Terhubung ke {d['host']}:{d['port']}"}
@@ -384,11 +398,16 @@ async def rt_private(project_id: str, user=Depends(get_current_user)) -> dict:
     return {"id": p["id"], "allow_operate": True}
 
 
-async def rt_public(slug: str) -> dict:
-    p = await db.projects.find_one({"publish_slug": slug, "published": True}, {"_id": 0, "id": 1, "allow_operate": 1})
+async def rt_public(slug: str, request: Request) -> dict:
+    p = await db.projects.find_one({"publish_slug": slug, "published": True}, {"_id": 0, "id": 1, "allow_operate": 1, "settings": 1})
     if not p:
         raise HTTPException(404, "Aplikasi tidak ditemukan atau belum dipublish")
-    return p
+    ctx = {"id": p["id"], "allow_operate": p.get("allow_operate", True), "can_ack": True}
+    if (p.get("settings") or {}).get("security_enabled"):
+        _, g = await client_from_request(request, p["id"])
+        ctx["allow_operate"] = ctx["allow_operate"] and g.get("can_operate", False)
+        ctx["can_ack"] = g.get("can_ack", False)
+    return ctx
 
 
 def make_rt_router(resolver):
@@ -435,6 +454,8 @@ def make_rt_router(resolver):
 
     @r.post("/alarms/ack")
     async def ack(body: AckIn, ctx=Depends(resolver)):
+        if not ctx.get("can_ack", True):
+            raise HTTPException(403, "Tidak punya hak ACK alarm")
         q = {"project_id": ctx["id"], "acked": False}
         if body.alarm_id:
             q["id"] = body.alarm_id
@@ -449,16 +470,72 @@ api.include_router(make_rt_router(rt_public), prefix="/public/{slug}/rt")
 
 
 @api.get("/public/{slug}")
-async def public_app(slug: str):
+async def public_app(slug: str, request: Request):
     p = await db.projects.find_one({"publish_slug": slug, "published": True}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Aplikasi tidak ditemukan atau belum dipublish")
     m = p.get("published_meta") or {}
+    settings = {**DEFAULT_SETTINGS, **(p.get("settings") or {})}
+    base = {"name": m.get("name", p["name"]), "security_enabled": settings["security_enabled"]}
+    session = None
+    if settings["security_enabled"]:
+        try:
+            u, g = await client_from_request(request, p["id"])
+            session = {"user": {"id": u["id"], "username": u["username"], "full_name": u.get("full_name", "")}, "group": g}
+        except HTTPException:
+            return base | {"requires_login": True}
     tags = await project_tags(p["id"])
     devices = await db.devices.find({"project_id": p["id"]}, {"_id": 0, "id": 1, "name": 1, "protocol": 1}).to_list(500)
-    return {"name": m.get("name", p["name"]), "width": m.get("width", p["width"]), "height": m.get("height", p["height"]),
+    return base | {"width": m.get("width", p["width"]), "height": m.get("height", p["height"]),
             "fonts": m.get("fonts", []), "screens": p["published_screens"], "allow_operate": p.get("allow_operate", True),
-            "published_at": p.get("published_at"), "tags": tags, "devices": devices}
+            "published_at": p.get("published_at"), "tags": tags, "devices": devices, "settings": settings, "session": session}
+
+
+# ---------------- Tag import / export ----------------
+@api.post("/projects/{project_id}/tags/import")
+async def import_tags(project_id: str, device_id: str = Form(...), file: UploadFile = File(...), user=Depends(get_current_user)):
+    await owned_project(project_id, user)
+    dev = await db.devices.find_one({"id": device_id, "project_id": project_id}, {"_id": 0})
+    if not dev:
+        raise HTTPException(400, "Perangkat tidak valid")
+    try:
+        rows = parse_tag_file(file.filename or "", await file.read())
+    except Exception as e:
+        raise HTTPException(400, f"Gagal membaca file: {e}")
+    existing = {t["name"] async for t in db.tags.find({"project_id": project_id}, {"_id": 0, "name": 1})}
+    created, skipped = [], []
+    for r in rows:
+        if r["name"] in existing:
+            skipped.append({"name": r["name"], "reason": "Nama sudah ada"})
+            continue
+        if r["raw_type"] and not r["data_type"]:
+            skipped.append({"name": r["name"], "reason": f"Tipe {r['raw_type']} tidak didukung"})
+            continue
+        try:
+            validate_address(dev["protocol"], r["address"])
+        except ValueError as e:
+            skipped.append({"name": r["name"], "reason": str(e)})
+            continue
+        dt = r["data_type"] or infer_type(dev["protocol"], r["address"])
+        dec = int(r["decimals"]) if str(r["decimals"]).isdigit() else (2 if dt == "FLOAT32" else 0)
+        body = TagIn(name=r["name"], device_id=device_id, address=r["address"], data_type=dt, decimals=dec, unit=r["unit"],
+                     description=r["description"], sim_mode="static" if dt == "BOOL" else "sine")
+        created.append(body.model_dump() | {"id": str(uuid.uuid4()), "project_id": project_id})
+        existing.add(r["name"])
+    if created:
+        await db.tags.insert_many([dict(c) for c in created])
+        await engine.load_config()
+    return {"created": len(created), "skipped": skipped, "total": len(rows)}
+
+
+@api.get("/projects/{project_id}/tags/export")
+async def export_tags(project_id: str, user=Depends(get_current_user)):
+    await owned_project(project_id, user)
+    devs = {d["id"]: d["name"] async for d in db.devices.find({"project_id": project_id}, {"_id": 0, "id": 1, "name": 1})}
+    lines = ["Name,Device,Address,Data Type,Decimals,Unit,Comment"]
+    async for t in db.tags.find({"project_id": project_id}, {"_id": 0}):
+        lines.append(",".join(str(x).replace(",", " ") for x in (t["name"], devs.get(t["device_id"], ""), t["address"], t["data_type"], t.get("decimals", 0), t.get("unit", ""), t.get("description", ""))))
+    return Response("\n".join(lines), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=tags.csv"})
 
 
 # ---------------- Files ----------------
@@ -499,6 +576,7 @@ async def root():
 
 
 app.include_router(api)
+app.include_router(security_router, prefix="/api")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.environ["FRONTEND_URL"], "http://localhost:3000"],
