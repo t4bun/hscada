@@ -258,15 +258,22 @@ class OpcUaDriver:
     def connect(self):
         if self.client:
             return
-        from asyncua.sync import Client
+        from asyncua.sync import Client, ThreadLoop
         d = self.dev
         url = d.get("opc_endpoint") or f"opc.tcp://{d['host']}:{int(d.get('port') or 4840)}"
-        c = Client(url, timeout=max(2, dev_timeout(d) * 2))
-        if d.get("opc_user"):
-            c.set_user(d["opc_user"])
-            c.set_password(d.get("opc_password") or "")
-        c.connect()
-        self.client = c
+        tloop = ThreadLoop()
+        tloop.daemon = True
+        tloop.start()
+        try:
+            c = Client(url, timeout=max(2, dev_timeout(d) * 2), tloop=tloop)
+            if d.get("opc_user"):
+                c.set_user(d["opc_user"])
+                c.set_password(d.get("opc_password") or "")
+            c.connect()
+        except Exception:
+            tloop.stop()
+            raise
+        self.client, self.tloop = c, tloop
 
     def _node(self, address):
         nid = opc_node_id(address, self.ns)
@@ -298,6 +305,7 @@ class OpcUaDriver:
                 self.client.disconnect()
             except Exception:
                 pass
+            self.tloop.stop()
         self.client, self.nodes = None, {}
 
 
@@ -325,6 +333,7 @@ def humanize(dev, err) -> str:
         (("address out of range", "item not available", "not exist"), "Alamat tidak tersedia — cek nomor DB/offset dan pastikan 'Optimized block access' nonaktif"),
         (("baduseraccessdenied", "badidentitytoken"), "Login OPC UA ditolak — periksa username/password"),
         (("badnodeidunknown",), "Simbol tidak ditemukan di PLC — cek nama tag dan namespace OPC UA"),
+        (("invalid argument", "errno 22"), f"{port} menolak pengaturan serial — cek baudrate/data bit/parity/stop bit didukung konverter"),
         (("checksum", "fcs"), "Data rusak (checksum salah) — cek baudrate/parity dan kualitas kabel"),
         (("no response", "not answer", "tidak menjawab"), f"Perangkat di {target} tidak menjawab — cek Station/Slave ID, baudrate, parity, dan wiring A/B"),
         (("connection refused", "10061", "actively refused"), f"PLC menolak koneksi di {target} — cek port / layanan komunikasi PLC"),

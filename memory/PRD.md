@@ -41,7 +41,15 @@ Extra: import photo, shape, font; widgets gauge, bar, history trend, chart trend
 - Function Button "Export Data Record → PDF" (runtime dialog: 1h/8h/24h/7d/custom) → PDF with history trend chart + data table (reportlab + matplotlib)
 - Bit Alarm & Word Alarm definitions (group, conditions ON/OFF, high/low/equal/range, record, not-save-when-off, beep/beep once, alarm screen popup/popup once, content text or Text Library)
 
+## Implemented — Iteration 4: Versi Lokal / On-Premise (2026-06)
+- New drivers (backend/plc_ext.py): Omron Host Link (serial), Fatek FBs (TCP/serial), S7-1200/1500 symbolic via OPC UA (asyncua), Wecon D/M/X/Y→Modbus mapping; Omron FINS UDP, S7-200 TSAP, Modbus RTU RS485/232/422
+- Engine: shared driver per device with lock (poll/write/test), auto-reconnect with configurable interval, status online/reconnecting/error, tag quality good/bad (last value kept), stats (ok/fail/rtt/avg/attempts), Indonesian error messages
+- API: /api/system/serial-ports, /api/system/info, test koneksi reads first tag; TIA import for symbolic devices with DB prefix
+- UI: protocol-specific device form, COM port detection, device cards with status colours + stats + inline test result, BAD/OFFLINE tag chip, runtime warning badge, local LAN address card (local mode)
+- Local packaging: local/launcher.py (bundled mongod + uvicorn serving API + SPA on :8080, COOKIE_SECURE=false, local disk file storage), installer.iss (Inno Setup: firewall, autostart task, shortcuts), build_windows.ps1, GitHub Actions workflow .github/workflows/windows-installer.yml
+- Virtual PLC simulators: backend/tests/virtual_plcs.py (Modbus, Fatek, FINS UDP, S7, OPC UA, Host Link pty)
+
 ## Backlog
-- P1: User/operator login for published apps (roles), edge gateway agent for LAN PLCs behind NAT
-- P1: Group select / align tools, widget templates/symbol library (pumps, valves, motors)
-- P2: Scripts/expressions on tags, recipe management, report PDF export, WebSocket push, mobile layout per screen
+- Fase 2: backup/restore project to file, export/import project between PCs, auto cleanup of old data records, raw-frame communication log page
+- Fase 3: Edge Gateway hybrid (cloud app + local agent with offline buffer), remote runtime access
+- P2: Scripts/expressions on tags, recipe management, WebSocket push

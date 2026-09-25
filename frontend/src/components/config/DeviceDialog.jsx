@@ -61,7 +61,7 @@ const SerialFields = ({ f, setF, set, n }) => (<>
 </>);
 
 const OpcFields = ({ f, set }) => (<>
-  <Txt className="col-span-2" label="Endpoint OPC UA (opsional)" k="opc_endpoint" f={f} set={set} testid="device-opc-endpoint-input" placeholder={`opc.tcp://${f.host || "192.168.0.1"}:${f.port || 4840}`} />
+  <Txt className="col-span-2" label="Endpoint OPC UA (opsional, menggantikan IP/Port)" k="opc_endpoint" f={f} set={set} testid="device-opc-endpoint-input" placeholder={`opc.tcp://${f.host || "192.168.0.1"}:${f.port || 4840}`} />
   <Num label="Namespace Index" k="opc_namespace" f={f} set={set} testid="device-opc-ns-input" />
   <span />
   <Txt label="Username (opsional)" k="opc_user" f={f} set={set} testid="device-opc-user-input" />

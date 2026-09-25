@@ -333,6 +333,7 @@ async def delete_device(device_id: str, user=Depends(get_current_user)):
     await owned_device(device_id, user)
     await db.devices.delete_one({"id": device_id})
     await db.tags.delete_many({"device_id": device_id})
+    engine.reset_driver(device_id)
     await engine.load_config()
     return {"ok": True}
 
@@ -709,6 +710,11 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
+    for dev_id in list(engine.drivers):
+        try:
+            await asyncio.wait_for(asyncio.to_thread(engine.reset_driver, dev_id), timeout=3)
+        except Exception:
+            pass
     client.close()
 
 

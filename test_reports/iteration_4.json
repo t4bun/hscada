@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 4 — validated On-Premise / real-PLC driver additions. Backend: 17/18 pytest tests pass (94%) against live virtual PLCs (Modbus TCP, Fatek TCP, Wecon, Omron FINS UDP, S7-1200 absolute, OPC UA symbolic, TIA symbolic tag import, auto-reconnect w/ Indonesian error + retry_in + stats.attempts + tag quality=bad->good, runtime write+readback, /api/meta protocol keys, /api/system/serial-ports, /api/system/info mode=cloud, public demo view regression). Frontend: config page renders 2 device cards (PLC Utama simulasi, Fatek Line 1 online), Test Koneksi returns inline result, add-device dialog switches protocol-specific fields correctly (serial, OPC UA endpoint/namespace/user/password, S7-200 TSAP, FINS nodes, reconnect/timeout, proto-note). Runtime /view/ghdhbuxrp4e loads (shows OPERATOR LOGIN, security enabled). Only 1 backend test failed: Omron Host Link over pty (env limitation).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/devices/{id}/test (omron_hostlink over /dev/pts pty)", "issue": "Test returns raw pyserial error '(22, Invalid argument)' instead of humanized Indonesian message. Likely because pty rejects setting baud/parity/stopbits; error is not passed through humanize()/is_conn_error mapping. Same driver may fail similarly on some real serial adapters."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Add Device dialog (s7_1200_1500_sym)", "issues": ["Host/Port fields are shown alongside OPC UA endpoint even though endpoint URL already encodes host:port. Review spec says OPC UA should only show endpoint/namespace/user/password. Consider hiding host/port for OPC UA family or auto-syncing them with endpoint."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/iteration4_test.py",
+    "/app/test_reports/pytest/iteration4_results.xml"
+  ],
+  "action_items": [
+    "Wrap serial-open errors in plc_ext.HostLink/serial Link with humanize() so they produce Indonesian messages (e.g. 'Gagal membuka port serial ...') instead of raw errno strings.",
+    "Consider hiding device-host-input / device-port-input when protocol family == 'opcua' since opc_endpoint supersedes them (minor UX)."
+  ],
+  "critical_code_review_comments": [
+    "DeviceDialog data-testid naming inconsistent with review spec: baud/databits/stopbits use *-select suffix and namespace uses device-opc-ns-input (spec said device-opc-namespace-input). Not a bug but future tests should reference the actual ids in components/config/DeviceDialog.jsx.",
+    "server.py test_device does not humanize errors for serial drivers (drivers surface raw OSError args). Consider a central try/except in engine.test that runs humanize()."
+  ],
+  "updated_files": [
+    "/app/backend/tests/iteration4_test.py (new)"
+  ],
+  "success_rate": {"backend": "94%", "frontend": "100% (all data-testids exercised for spec'd flows)"},
+  "test_credentials": "amoskun99@gmail.com / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Test-created devices/tags are auto-deleted in session cleanup fixture (verified: only 'PLC Utama' and 'Fatek Line 1' remain).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Virtual PLCs are running via `python virtual_plcs.py` (pid check via ps). Restart: cd /app/backend/tests && nohup python virtual_plcs.py > /tmp/vplc.log 2>&1 &. Ports 5020, 5500, 9601, 1102, 4841 must be open. Host Link pty path stored in /tmp/hostlink_pty (currently /dev/pts/0) — the pyserial open on it fails with EINVAL in this container (env limitation, not a functional bug in driver logic; humanization missing though). Backend pytest.ini enforces `-n 2 --dist loadscope`; use `-n 0` for serial runs. REACT_APP_BACKEND_URL must be exported before invoking pytest.",
+  "rca of the issue": "Hostlink test failure RCA: pyserial's Serial.__init__ tries to configure 7E2 on a Linux pty pair; some kernel/pty combinations reject termios settings with EINVAL (errno 22). Backend code in plc_ext.HostLink -> Link.open surfaces the raw exception ((22,'Invalid argument')) up to /api/devices/{id}/test without passing through humanize(). Mitigation: wrap Link.open() in try/except OSError as e: raise PlcError(humanize(e, 'membuka port serial')). Verified against virtual PLC log — the hostlink server binds to /dev/pts/0 successfully, so functional round-trip may work if we set exclusive=False and skip bytesize on pty, but that's a driver hardening concern."
+}
