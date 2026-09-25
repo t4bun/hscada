@@ -59,6 +59,13 @@ class Engine:
         self.retry_at.pop(dev_id, None)
         self.stats.pop(dev_id, None)
 
+    async def cleanup_records(self):
+        from records import cleanup_all
+        try:
+            await cleanup_all()
+        except Exception:
+            log.exception("record cleanup failed")
+
     async def sample_records(self, t):
         now = datetime.now(timezone.utc)
         docs = []
@@ -144,6 +151,8 @@ class Engine:
             try:
                 if self.tick % 5 == 0:
                     await self.load_config()
+                if self.tick % 3600 == 60:
+                    asyncio.create_task(self.cleanup_records())
                 await self.step()
             except Exception:
                 log.exception("engine step failed")

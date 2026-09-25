@@ -1,6 +1,6 @@
 import io
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Literal
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -39,6 +39,58 @@ class AlarmDefIn(BaseModel):
     beep_once: bool = False
     alarm_screen: str = ""
     popup_once: bool = True
+
+
+def retention(settings: Optional[dict]):
+    s = settings or {}
+    return bool(s.get("record_retention_enabled", True)), min(3650, max(1, int(s.get("record_retention_days") or 90)))
+
+
+def iso(ts):
+    return ts.replace(tzinfo=timezone.utc).isoformat() if ts else None
+
+
+async def cleanup_project(p: dict) -> int:
+    on, days = retention(p.get("settings"))
+    if not on:
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    res = await db.record_samples.delete_many({"project_id": p["id"], "ts": {"$lt": cutoff}})
+    info = {"at": datetime.now(timezone.utc).isoformat(), "deleted": res.deleted_count, "cutoff": cutoff.isoformat()}
+    await db.projects.update_one({"id": p["id"]}, {"$set": {"record_cleanup": info}})
+    return res.deleted_count
+
+
+async def cleanup_all():
+    async for p in db.projects.find({}, {"_id": 0, "id": 1, "settings": 1}):
+        await cleanup_project(p)
+
+
+@router.get("/projects/{pid}/records/storage")
+async def record_storage(pid: str, user=Depends(get_current_user)):
+    await engineer_project(pid, user)
+    p = await db.projects.find_one({"id": pid}, {"_id": 0, "settings": 1, "record_cleanup": 1})
+    q = {"project_id": pid}
+    n = await db.record_samples.count_documents(q)
+    first = await db.record_samples.find_one(q, {"_id": 0, "ts": 1}, sort=[("ts", 1)])
+    last = await db.record_samples.find_one(q, {"_id": 0, "ts": 1}, sort=[("ts", -1)])
+    try:
+        avg = (await db.command("collStats", "record_samples")).get("avgObjSize", 0)
+    except Exception:
+        avg = 0
+    on, days = retention(p.get("settings"))
+    return {"samples": n, "oldest": iso(first and first["ts"]), "newest": iso(last and last["ts"]), "est_bytes": int(n * avg),
+            "enabled": on, "days": days, "last_cleanup": p.get("record_cleanup")}
+
+
+@router.post("/projects/{pid}/records/cleanup")
+async def record_cleanup_now(pid: str, user=Depends(get_current_user)):
+    await engineer_project(pid, user)
+    p = await db.projects.find_one({"id": pid}, {"_id": 0, "id": 1, "settings": 1})
+    on, days = retention(p.get("settings"))
+    if not on:
+        raise HTTPException(400, "Hapus otomatis sedang nonaktif")
+    return {"deleted": await cleanup_project(p), "days": days}
 
 
 async def check_tags(pid: str, ids: List[str]):

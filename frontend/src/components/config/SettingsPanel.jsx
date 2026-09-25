@@ -4,6 +4,7 @@ import { Save } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { api, errMsg } from "@/lib/api";
 import { inputCls, L } from "./DeviceDialog";
+import { RetentionCard } from "./RetentionCard";
 
 const Card = ({ title, children }) => (
   <section className="border border-slate-800 bg-[#111827] rounded-sm p-6 space-y-4">
@@ -15,14 +16,14 @@ const Card = ({ title, children }) => (
 export const SettingsPanel = ({ project, onSaved }) => {
   const [s, setS] = useState(project.settings);
   const set = (k) => (v) => setS({ ...s, [k]: v?.target ? v.target.value : v });
-  const save = async () => {
-    try { await api.put(`/projects/${project.id}`, { settings: s }); toast.success("Pengaturan disimpan"); onSaved(); } catch (e) { toast.error(errMsg(e)); }
+  const save = async (silent) => {
+    try { await api.put(`/projects/${project.id}`, { settings: s }); if (!silent) toast.success("Pengaturan disimpan"); onSaved(); } catch (e) { toast.error(errMsg(e)); }
   };
   return (
     <div className="space-y-6 max-w-3xl" data-testid="settings-panel">
       <div className="flex items-end justify-between">
         <div><p className="text-[10px] font-bold uppercase tracking-[0.25em] text-blue-400">Project Settings</p><h2 className="font-heading text-2xl font-bold mt-1">Pengaturan Proyek SCADA</h2></div>
-        <button data-testid="settings-save-btn" onClick={save} className="h-9 px-4 flex items-center gap-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 rounded-sm"><Save size={14} />Simpan</button>
+        <button data-testid="settings-save-btn" onClick={() => save()} className="h-9 px-4 flex items-center gap-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 rounded-sm"><Save size={14} />Simpan</button>
       </div>
       <Card title="Komunikasi">
         <L label="Byte Order Default (data 32-bit)" hint="ABCD = Big Endian (Siemens), CDAB = Word Swap (Omron/umum Modbus), BADC = Byte Swap, DCBA = Little Endian. Bisa di-override per perangkat.">
@@ -45,6 +46,9 @@ export const SettingsPanel = ({ project, onSaved }) => {
         {s.screen_saver_enabled && (
           <L label="Timeout (menit)"><input data-testid="settings-screensaver-minutes" type="number" min={1} className={inputCls} value={s.screen_saver_minutes} onChange={(e) => set("screen_saver_minutes")(Number(e.target.value))} /></L>
         )}
+      </Card>
+      <Card title="Penyimpanan Data Record">
+        <RetentionCard projectId={project.id} s={s} set={set} saveSettings={save} />
       </Card>
       <Card title="Security">
         <div className="flex items-center justify-between">

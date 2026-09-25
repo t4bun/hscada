@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 api = APIRouter(prefix="/api")
 engine = Engine(db)
-DEFAULT_SETTINGS = {"byte_order": "ABCD", "initial_screen": "", "screen_saver_enabled": False, "screen_saver_minutes": 5, "security_enabled": False}
+DEFAULT_SETTINGS = {"byte_order": "ABCD", "initial_screen": "", "screen_saver_enabled": False, "screen_saver_minutes": 5, "security_enabled": False,
+                    "record_retention_enabled": True, "record_retention_days": 90}
 
 
 def now_iso():
@@ -696,7 +697,8 @@ async def startup():
     await db.tag_history.create_index([("project_id", 1), ("ts", -1)])
     await db.tag_history.create_index("ts", expireAfterSeconds=7 * 86400, name="ts_ttl")
     await db.record_samples.create_index([("project_id", 1), ("record", 1), ("ts", -1)])
-    await db.record_samples.create_index("ts", expireAfterSeconds=90 * 86400, name="rs_ttl")
+    if "rs_ttl" in await db.record_samples.index_information():
+        await db.record_samples.drop_index("rs_ttl")
     await db.alarms.create_index([("project_id", 1), ("ts_in", -1)])
     await db.projects.create_index("publish_slug")
     await seed_admin()
