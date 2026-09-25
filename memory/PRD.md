@@ -61,6 +61,14 @@ Extra: import photo, shape, font; widgets gauge, bar, history trend, chart trend
 - History trend PDF (chart only) separated from Data Log export (PDF/Excel/CSV) via new function button action export_log
 - Function button: shape/image from project shape library or import, transparent mode, minimum press time (ms)
 
+## Implemented — Iteration 8: Template, Kiosk, Workspace, BCD (2026-06)
+- Rename brand to "Scada by T4bun" (UI, installer, launcher, data dir ScadaT4bun); export/import format .tbn (legacy .nhmi accepted)
+- Project templates (save/list/create 1-klik + publish, export/import .tbn)
+- Kiosk mode (?kiosk=1 auto full-screen, PWA manifest fullscreen + sw, Edge --kiosk shortcut in installer)
+- Workspace name & logo (system settings, Brand in header/login/title)
+- Numeric Display/Input min & max prefilled from data type (editable, out-of-range rejected/red); Character Display max chars 1–256 (default 1); data types BCD16/BCD32 + STRING (length); Omron address suggests BCD16
+- Alarm history auto-delete (alarm_retention_days) with storage stats & clean-now
+
 ## Backlog
 - Fase 2: raw-frame communication log page, backup schedule
 - Fase 3: Edge Gateway hybrid (cloud app + local agent with offline buffer), remote runtime access

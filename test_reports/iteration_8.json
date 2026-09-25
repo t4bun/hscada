@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 8 - Full backend + frontend coverage for iteration-8 spec (templates, .tbn export/import, workspace, BCD/STRING, alarm retention, numeric/char widgets, kiosk PWA). Backend pytest: 27/28 passed. Frontend UI: all critical flows verified. One backend bug found: writing to STRING tag returns 502 instead of 4xx. Environment fully restored (workspace 'Scada by T4bun', no logo, only Demo Pengolahan Air project remains, no TEST_* templates/tags).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/projects/{pid}/rt/write (STRING tag)", "issue": "Spec requires 4xx rejection when writing to STRING tag; current impl wraps clamp_value's ValueError('Tag STRING hanya bisa dibaca') as HTTPException(502). Fix: in server.py write handler, treat ValueError as HTTPException(400) or short-circuit in engine.write when data_type=='STRING'."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/iteration8_test.py",
+    "/app/test_reports/pytest/iteration8.xml"
+  ],
+  "action_items": [
+    "Fix STRING-tag write to return 4xx (currently 502). In backend/server.py runtime write handler wrap ValueError -> HTTPException(400), or catch it before calling engine.write."
+  ],
+  "critical_code_review_comments": [
+    "backend/engine.py write(): clamp_value raises ValueError for STRING which is caught by server.py write handler as HTTPException(502). This misclassifies a client-input error as gateway error.",
+    "backend/transfer.py parse_bundle(): accepts both 't4bun-project' and legacy 'nusahmi-project' correctly, but the error message 'File bukan project Scada by T4bun (.tbn)' is misleading for a legacy .nhmi with wrong format-string; consider more specific message.",
+    "backend/records.py cleanup_alarms: uses ISO string comparison on ts_in ($lt cutoff-ISO). Works because ISO 8601 sorts lexicographically only when timezone/format is consistent. Seeded test confirms it works.",
+    "backend/system.py write_settings: strips workspace_name empty -> replaces with 'Scada by T4bun' (fallback to default rather than error). Pydantic min_length=1 already forces 422 for empty at parse time, so the strip fallback is dead code but harmless.",
+    "frontend TemplatesSection.jsx uses window.prompt / window.confirm - blocks Playwright unless dialog listener is set; works but a modal-based prompt with data-testid would be more testable.",
+    "frontend Palette.jsx palette-item onClick adds widget at canvas center; drag-and-drop optional. Good testability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/iteration8_test.py"
+  ],
+  "success_rate": {"backend": "96% (27/28)", "frontend": "100% of exercised flows"},
+  "test_credentials": "amoskun99@gmail.com / admin123",
+  "seed_data_creation": "Ephemeral: created & deleted TEST_TPL_* templates, FROM_TPL_* projects, TEST_BCD16/32/STR tags on Demo Pengolahan Air, seeded 3 TEST_ALM_* alarm docs (all cleaned up). Verified final DB state: only Demo Pengolahan Air project, no TEST_* remnants, workspace_name='Scada by T4bun', workspace_logo=''.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend testids used: template-project-{i}, template-card-{i}, template-use-{i}, template-use-publish-{i}, template-export-{i}, template-delete-{i}, template-import-btn, template-import-input (accept='.tbn,.nhmi,.json'). Workspace: server-settings-btn, server-settings-dialog, workspace-section, workspace-name-input, workspace-logo-btn, workspace-logo-clear, workspace-name (header), workspace-brand. Editor Inspector: prop-min, prop-max, prop-data_type (STRING filtered out), prop-max_chars (1..256, clamped). Runtime: runtime-kiosk-btn, runtime-viewer[data-kiosk='true']. Config Pengaturan tab has both alarm-settings-retention-* and settings-retention-* cards. PWA manifest serves display:fullscreen with 2 icons; /icon-192.png /icon-512.png /sw.js all 200. STRING write bug: currently 502, spec wants 4xx.",
+  "rca of the issue": "STRING write 502 root cause: backend/engine.py line 347 calls clamp_value(dt, dec, float(value)) which for dt=='STRING' raises ValueError('Tag STRING hanya bisa dibaca'). server.py runtime write endpoint catches all exceptions as HTTPException(502, 'Gagal menulis ke PLC: ...'). Mitigation: either (a) in server.py write handler, catch ValueError separately and raise HTTPException(400, str(e)); or (b) in engine.write, short-circuit STRING before calling clamp_value and raise a specific error. Also front-end should hide write UI for STRING tags."
+}

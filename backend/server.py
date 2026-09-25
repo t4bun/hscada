@@ -516,6 +516,8 @@ def make_rt_router(resolver):
             raise HTTPException(404, "Tag tidak ditemukan")
         if not t.get("writable", True):
             raise HTTPException(403, "Tag read-only")
+        if t["data_type"] == "STRING":
+            raise HTTPException(400, "Tag STRING hanya bisa dibaca")
         try:
             v = await engine.write(t, body.value)
         except Exception as e:
