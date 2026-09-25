@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration-3 regression: 16/16 new backend pytests PASS in /app/backend/tests/iteration3_test.py covering Data Records CRUD (max 100, channels<=99, unique number 1..100, invalid tag rejection), Alarm Defs CRUD & validation (bit condition on/off, word conditions high/low/equal/range with required value/low+high), runtime /rt/records list, /rt/records/{no}/samples (engine sampling verified), /rt/records/{no}/pdf returns application/pdf (%PDF magic + size), missing record 404, /rt/values includes alarm_events (mixed def-based BIT/HI/LO/EQ/RNG and legacy HH/H/LL/L/ON levels), public runtime PDF requires client login (401 anon) and works with X-Client-Token. Frontend: builder Data & Alarm tab (config-tab-data) fully wired — data-alarm-panel with Data Records table (record-row-0 for seeded #1 'Proses Utama' 5s, 4 channels), Bit Alarm table (Valve_Open Bit OFF group 1) and Word Alarm table (Tekanan High Limit >= 8.5 group 2 REC/BEEP1). Record dialog exposes record-number/name/interval, record-channel-count '0/99', 8 record-ch-<tag> checkboxes; bit alarm-dialog exposes only BOOL tags in alarm-tag-select (Pompa_Run, Valve_Open) + alarm-group/condition/library/content/record/notsaveoff/beep/screen/popuponce; word alarm-dialog exposes non-BOOL tags + alarm-format/condition/value/beeponce; switching condition to 'range' reveals alarm-low+alarm-high; saving range without low/high shows toast 'Range alarm butuh batas bawah & atas'. Runtime /view/ghdhbuxrp4e: client admin/admin123 login works; LAPORAN button opens Laporan screen showing HISTORY TREND 30 MENIT · #1 with 4 lines (Flow_Rate, Level_Tangki, Suhu_Air, Tekanan), history-prev/history-next/history-now nav testids present, DATA RECORD · #1 table with 4 channel columns, RIWAYAT ALARM table with GRP column + BIT/HI/LL/H/HH/L levels rendered; EXPORT PDF button opens pdf-dialog with pdf-range-60/480/1440/10080/0; custom (0) reveals pdf-start & pdf-end datetime inputs; pdf-download-btn successfully downloads data-record-1.pdf (real PDF blob).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/iteration3_test.py",
+    "/app/backend/tests/iteration2_test.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iteration3.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "engine.py has two parallel alarm systems writing to db.alarms: legacy tag-based check_alarms (levels HH/H/LL/L/ON via level_for) AND new def-based check_alarm_defs (BIT/HI/LO/EQ/RNG). Both can trigger simultaneously producing duplicate rows for the same tag (e.g. seed already shows Level_Tangki alarms from both). Consider deprecating legacy check_alarms or gating it when an alarm def exists for the tag.",
+    "records.py build_pdf uses matplotlib in-process; safe due to Agg + asyncio.to_thread. Consider caching the built PDF for identical (record,start,end) tuples if this endpoint is called repeatedly by clients.",
+    "records.py RecordIn allows enabled=False records via PUT — engine.load_config filters by enabled=True, so disabled records simply stop sampling (correct behavior, but no UI for toggling in DataAlarmPanel; only via API).",
+    "records.py delete/edit routes do not verify rid belongs to project before delete/update (they rely on the compound {id, project_id} filter which is fine, but a 404 is silently returned as 200/ok:true on mismatched rid). Minor.",
+    "server.py make_rt_router /records/{no}/pdf loads all rows into memory; ok up to 20000 rows, but no cap warning is returned to client if window exceeds it."
+  ],
+  "updated_files": [
+    "/app/backend/tests/iteration3_test.py (new)"
+  ],
+  "success_rate": {"backend": "100% (16/16 iteration-3)", "frontend": "100% of tested flows"},
+  "test_credentials": "Builder amoskun99@gmail.com/admin123; Client admin/admin123 on slug ghdhbuxrp4e (both verified).",
+  "seed_data_creation": "Tests create+delete TEST_-prefixed records and alarm defs. Seeded Data Record #1 and the two seeded alarm defs (bit Valve_Open OFF, word Tekanan>=8.5) were NOT modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration-3 backend suite at /app/backend/tests/iteration3_test.py; uses ADMIN_EMAIL=amoskun99@gmail.com and DEMO_SLUG=ghdhbuxrp4e. /rt/values 'alarm_events' may contain both new-format (BIT/HI/LO/EQ/RNG) and legacy (HH/H/LL/L/ON) levels — accept the union. In the builder, Data & Alarm tab is data-testid=config-tab-data and only becomes reachable after entering project config via 'Perangkat & Tag' link on the /projects card (there is no top-level 'Konfigurasi' link). Builder login button is the last role=button name='Masuk' on /login (the first is the Masuk/Daftar tab)."
+}

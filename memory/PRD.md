@@ -34,6 +34,13 @@ Extra: import photo, shape, font; widgets gauge, bar, history trend, chart trend
 - Project settings: byte order (ABCD/CDAB/BADC/DCBA, per-device override), initial screen, screen saver; Modbus RTU RS485 serial + RTU over TCP
 - Builder admin: amoskun99@gmail.com
 
+## Implemented — Iteration 3 (2026-06)
+- Data Records: max 100 per project, up to 99 channel addresses each, sampling interval, stored in record_samples (TTL 90 days)
+- History Trend widget: source = data record number + per-line enable/type(line/dash/step/area)/width/color; appearance (x/y grids, bg, grid color, date & time format, slider, opacity); Y limits; start time (latest/custom) + span with prev/next/now navigation
+- Data Record table widget bound to record number; Alarm Record widget with group filter + GRP column
+- Function Button "Export Data Record → PDF" (runtime dialog: 1h/8h/24h/7d/custom) → PDF with history trend chart + data table (reportlab + matplotlib)
+- Bit Alarm & Word Alarm definitions (group, conditions ON/OFF, high/low/equal/range, record, not-save-when-off, beep/beep once, alarm screen popup/popup once, content text or Text Library)
+
 ## Backlog
 - P1: User/operator login for published apps (roles), edge gateway agent for LAN PLCs behind NAT
 - P1: Group select / align tools, widget templates/symbol library (pumps, valves, motors)

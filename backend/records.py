@@ -144,7 +144,7 @@ def build_pdf(title: str, record: dict, tags: dict, rows: list, start: datetime,
     for c in chans:
         ax.plot(xs, [r["v"].get(c) for r in rows], label=tags[c]["name"], linewidth=1.4)
     ax.grid(True, alpha=0.3)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m %H:%M"))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S" if (end - start).total_seconds() <= 86400 else "%d/%m %H:%M"))
     ax.set_title(f"History Trend — Record #{record['number']} {record.get('name', '')}")
     if chans:
         ax.legend(fontsize=7, ncol=min(len(chans), 6), loc="upper left")
