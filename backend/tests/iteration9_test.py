@@ -1,13 +1,12 @@
 """Iteration 9 - Kiosk Exit PIN tests."""
 import os
-import time
 import pytest
 import requests
 
 BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://plc-visual-studio.preview.emergentagent.com").rstrip("/")
 API = f"{BASE}/api"
-EMAIL = "amoskun99@gmail.com"
-PASSWORD = "admin123"
+from creds import ADMIN_EMAIL, ADMIN_PASSWORD, CLIENT_PASSWORD  # noqa: F401
+EMAIL, PASSWORD = ADMIN_EMAIL, ADMIN_PASSWORD
 
 
 @pytest.fixture(scope="module")

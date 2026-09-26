@@ -12,8 +12,7 @@ import requests
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://plc-visual-studio.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = "admin@scada.id"
-ADMIN_PASSWORD = "admin123"
+from creds import ADMIN_EMAIL, ADMIN_PASSWORD, CLIENT_PASSWORD  # noqa: F401
 
 
 # ---------------- Fixtures ----------------

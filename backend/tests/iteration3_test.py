@@ -10,8 +10,7 @@ import os, time, uuid, pytest, requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://plc-visual-studio.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
-ADMIN_EMAIL = "amoskun99@gmail.com"
-ADMIN_PASSWORD = "admin123"
+from creds import ADMIN_EMAIL, ADMIN_PASSWORD, CLIENT_PASSWORD  # noqa: F401
 DEMO_SLUG = "ghdhbuxrp4e"
 
 
@@ -233,7 +232,7 @@ class TestPublicPdf:
 
     def test_public_pdf_with_client_login(self):
         lr = requests.post(f"{API}/public/{DEMO_SLUG}/auth/login",
-                           json={"username": "admin", "password": "admin123"})
+                           json={"username": "admin", "password": CLIENT_PASSWORD})
         assert lr.status_code == 200
         tok = lr.json()["token"]
         r = requests.get(f"{API}/public/{DEMO_SLUG}/rt/records/1/pdf",

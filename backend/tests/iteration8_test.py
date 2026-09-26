@@ -17,7 +17,8 @@ import pytest
 import requests
 
 BASE = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/") + "/api"
-ADMIN = {"email": "amoskun99@gmail.com", "password": "admin123"}
+from creds import ADMIN_EMAIL, ADMIN_PASSWORD, CLIENT_PASSWORD  # noqa: F401
+ADMIN = {"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
 OTHER = {"email": f"tpl_other_{int(time.time())}@test.local", "name": "Other TPL", "password": "test1234"}
 
 
@@ -267,7 +268,6 @@ class TestNewTypes:
         r = s.get(f"{BASE}/projects/{pid}/rt/values", timeout=10)
         assert r.status_code == 200, r.text
         vals = r.json().get("values", {})
-        str_tags = [tid for tid in TestNewTypes.created_tag_ids if vals.get(tid) is not None]
         # find the STRING one
         for tid in TestNewTypes.created_tag_ids:
             tag = next((t for t in s.get(f"{BASE}/projects/{pid}/tags").json() if t["id"] == tid), None)

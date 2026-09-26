@@ -42,6 +42,7 @@ def fatek_client(c):
             t = fr[fr.find(b"\x02") + 1:-2].decode()
             st, cmd, body = t[:2], t[2:4], t[4:]
             n = int(body[:2], 16)
+            out = ""
             if cmd == "46":
                 a = int(body[3:8])
                 out = "".join(f"{WORDS[a + i]:04X}" for i in range(n))

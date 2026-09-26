@@ -22,7 +22,8 @@ import requests
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 assert BASE_URL, "REACT_APP_BACKEND_URL must be set"
 
-ADMIN = {"email": "amoskun99@gmail.com", "password": "admin123"}
+from creds import ADMIN_EMAIL, ADMIN_PASSWORD, CLIENT_PASSWORD  # noqa: F401
+ADMIN = {"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
 HOSTLINK_PTY = None
 if os.path.exists("/tmp/hostlink_pty"):
     with open("/tmp/hostlink_pty") as f:
@@ -230,7 +231,7 @@ def test_hostlink_serial(client, project_id):
     dev = _make_device(client, project_id, name="TEST_hostlink", protocol="omron_hostlink",
                        host="", port=0, serial_port=HOSTLINK_PTY, baudrate=9600,
                        databits=7, parity="E", stopbits=2, unit_id=0)
-    tag = _make_tag(client, project_id, dev["id"], "TEST_hostlink_tag", "D100", "INT16")
+    _make_tag(client, project_id, dev["id"], "TEST_hostlink_tag", "D100", "INT16")
     time.sleep(1.5)
     r = client.post(f"{BASE_URL}/api/devices/{dev['id']}/test")
     assert r.status_code == 200, r.text

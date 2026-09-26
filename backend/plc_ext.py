@@ -2,7 +2,7 @@ import re
 import socket
 import struct
 
-from drivers import PROTOCOLS, TYPE_SIZE, PlcError, decode_bytes, encode_bytes, text_from
+from driver_common import PROTOCOLS, TYPE_SIZE, PlcError, decode_bytes, encode_bytes, text_from
 
 
 def dev_timeout(dev) -> float:

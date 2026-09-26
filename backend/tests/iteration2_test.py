@@ -15,10 +15,9 @@ BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://plc-visual-studio.pr
 API = f"{BASE_URL}/api"
 
 # Iteration-2 test targets amoskun99 (owns Demo Pengolahan Air, security_enabled=true)
-ADMIN_EMAIL = "amoskun99@gmail.com"
-ADMIN_PASSWORD = "admin123"
+from creds import ADMIN_EMAIL, ADMIN_PASSWORD, CLIENT_PASSWORD  # noqa: F401
 DEMO_SLUG = "ghdhbuxrp4e"          # published slug per review
-CLIENT_ADMIN = ("admin", "admin123")
+CLIENT_ADMIN = ("admin", CLIENT_PASSWORD)
 
 
 # ---------------- Fixtures ----------------

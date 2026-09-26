@@ -38,7 +38,8 @@ def parse_tag_file(filename: str, data: bytes):
         raise ValueError("Header tidak ditemukan. Butuh kolom 'Name' dan 'Logical Address'/'Address'.")
     out = []
     for r in rows[hi + 1:]:
-        get = lambda k: str(r[idx[k]]).strip() if idx[k] is not None and idx[k] < len(r) else ""
+        def get(k, r=r):
+            return str(r[idx[k]]).strip() if idx[k] is not None and idx[k] < len(r) else ""
         name, addr = get("name"), get("address").lstrip("%").replace(" ", "")
         if not name:
             continue

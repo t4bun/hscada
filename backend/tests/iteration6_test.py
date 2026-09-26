@@ -1,5 +1,4 @@
 """Iteration 6 — Hide engineer / boot, export-import, ensure-tag, data log formats."""
-import io
 import json
 import os
 import uuid
@@ -8,7 +7,8 @@ import pytest
 import requests
 
 BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
-ADMIN = {"email": "amoskun99@gmail.com", "password": "admin123"}
+from creds import ADMIN_EMAIL, ADMIN_PASSWORD, CLIENT_PASSWORD  # noqa: F401
+ADMIN = {"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
 
 
 @pytest.fixture(scope="module")
@@ -186,7 +186,6 @@ class TestEnsureTag:
         device_id = dv[0]["id"]
         proto = dv[0].get("protocol", "")
 
-        addr = "M100" if "s7" in proto.lower() or "S7" in proto else "40100"
         # Try a couple candidates for compatibility
         candidates = ["M100.0", "M100", "40100", "%MX100.0"]
         created_id = None

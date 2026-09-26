@@ -20,7 +20,8 @@ from pymongo import MongoClient
 BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 MONGO = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 DBNAME = os.environ.get("DB_NAME", "test_database")
-ADMIN = {"email": "amoskun99@gmail.com", "password": "admin123"}
+from creds import ADMIN_EMAIL, ADMIN_PASSWORD, CLIENT_PASSWORD  # noqa: F401
+ADMIN = {"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
 
 
 @pytest.fixture(scope="module")
