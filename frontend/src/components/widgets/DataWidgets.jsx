@@ -4,6 +4,7 @@ import { Download, Check } from "lucide-react";
 import { useRt, usePolling } from "@/hooks/useLive";
 import { api } from "@/lib/api";
 import { SERIES_COLORS } from "@/lib/format";
+import { ChartSettings, useChartPrefs, SPAN_MS, toLocalInput } from "./ChartSettings";
 
 const hhmmss = (t) => new Date(t).toLocaleTimeString("id-ID", { hour12: false });
 const pivot = (rows) => {
@@ -26,11 +27,11 @@ const Frame = ({ title, right, children }) => (
   </div>
 );
 
-const Chart = ({ data, tags, tagMap, yMin, yMax }) => (
+const Chart = ({ data, tags, tagMap, yMin, yMax, fmt = hhmmss }) => (
   <ResponsiveContainer width="100%" height="100%" minWidth={50} minHeight={50}>
     <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
       <CartesianGrid stroke="#1E293B" strokeDasharray="3 3" />
-      <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} tickFormatter={hhmmss} stroke="#475569" fontSize={10} tick={{ fill: "#64748B" }} />
+      <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} tickFormatter={fmt} stroke="#475569" fontSize={10} tick={{ fill: "#64748B" }} />
       <YAxis domain={[yMin === "" || yMin == null ? "auto" : Number(yMin), yMax === "" || yMax == null ? "auto" : Number(yMax)]} stroke="#475569" fontSize={10} tick={{ fill: "#64748B" }} />
       <Tooltip labelFormatter={hhmmss} contentStyle={{ background: "#0B0F17", border: "1px solid #1E293B", fontSize: 11 }} />
       <Legend wrapperStyle={{ fontSize: 10 }} />
@@ -41,24 +42,28 @@ const Chart = ({ data, tags, tagMap, yMin, yMax }) => (
   </ResponsiveContainer>
 );
 
-export const Trend = ({ p }) => {
+export const Trend = ({ p, w }) => {
   const { values, tagMap, base, ts } = useRt();
   const tags = useMemo(() => (p.tags || []).filter((t) => tagMap[t]), [p.tags, tagMap]);
   const [data, setData] = useState([]);
-  const win = Math.max(10, Number(p.window) || 120) * 1000;
+  const defSec = Math.max(10, Number(p.window) || 120);
+  const [prefs, save, reset, custom] = useChartPrefs(`scada-chart:${base}:${w?.id}`, { span_value: Math.max(1, Math.round(defSec / 60)), span_unit: "min" });
+  const win = custom ? Number(prefs.span_value) * SPAN_MS[prefs.span_unit] : defSec * 1000;
   useEffect(() => {
     if (!base || !tags.length) return;
-    api.get(`${base}/history`, { params: { tags: tags.join(","), minutes: Math.ceil(win / 60000) } }).then(({ data: rows }) => setData(pivot(rows))).catch(() => {});
+    api.get(`${base}/history`, { params: { tags: tags.join(","), minutes: Math.ceil(win / 60000), limit: 20000 } }).then(({ data: rows }) => setData(pivot(rows))).catch(() => {});
   }, [base, tags, win]);
   useEffect(() => {
     if (!ts) return;
     const now = Date.now();
     const pt = { t: now };
     tags.forEach((id) => { if (values[id] !== undefined) pt[id] = Number(values[id]); });
-    setData((d) => [...d.filter((x) => x.t > now - win), pt]);
+    setData((d) => [...d.filter((x) => x.t > now - win), pt].slice(-20000));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ts]);
-  return <Frame title={p.title}>{tags.length ? <Chart data={data} tags={tags} tagMap={tagMap} yMin={p.y_min} yMax={p.y_max} /> : <Empty />}</Frame>;
+  const fmt = win > SPAN_MS.day ? (t) => fmtTs(t, "DD/MM", "HH:mm") : hhmmss;
+  const right = <ChartSettings testid="trend" prefs={prefs} onApply={save} onReset={reset} custom={custom} maxMs={7 * SPAN_MS.day} />;
+  return <Frame title={p.title} right={right}>{tags.length ? <Chart data={data} tags={tags} tagMap={tagMap} yMin={p.y_min} yMax={p.y_max} fmt={fmt} /> : <Empty />}</Frame>;
 };
 
 const Empty = () => <div className="h-full grid place-items-center text-xs text-slate-500 font-mono">Pilih tag di panel properti</div>;
@@ -72,22 +77,25 @@ export const fmtTs = (t, df = "DD/MM", tf = "HH:mm:ss") => {
   return [date, time].filter(Boolean).join(" ");
 };
 const flat = (rows) => rows.map((r) => ({ t: new Date(r.ts).getTime(), ...r.v }));
-const SPAN_MS = { min: 60000, hour: 3600000, day: 86400000 };
-const toLocalInput = (ms) => { const d = new Date(ms - new Date().getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
 
-export const HistoryTrend = ({ p }) => {
+export const HistoryTrend = ({ p, w }) => {
   const { base, records } = useRt();
   const rec = (records || []).find((r) => r.number === Number(p.record_no));
-  const span = Math.max(1, Number(p.span_value) || 30) * (SPAN_MS[p.span_unit] || 60000);
-  const [start, setStart] = useState(null);
-  useEffect(() => setStart(p.start_option === "custom" ? Date.now() - span : null), [p.start_option, span]);
+  const defSpan = { span_value: Math.max(1, Number(p.span_value) || 30), span_unit: SPAN_MS[p.span_unit] ? p.span_unit : "min" };
+  const defStart = useMemo(() => (p.start_option === "custom" ? Date.now() - defSpan.span_value * SPAN_MS[defSpan.span_unit] : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [p.start_option, defSpan.span_value, defSpan.span_unit]);
+  const [prefs, save, reset, custom] = useChartPrefs(`scada-chart:${base}:${w?.id}`, { ...defSpan, start: defStart });
+  const span = Number(prefs.span_value) * SPAN_MS[prefs.span_unit];
+  const start = prefs.start;
+  const setStart = (fn) => save({ ...prefs, start: typeof fn === "function" ? fn(start) : fn });
   const [rows, setRows] = useState([]);
   usePolling(async (alive) => {
     if (!base || !rec) return;
     const end = start === null ? Date.now() : start + span;
     const s = start === null ? end - span : start;
     try {
-      const { data } = await api.get(`${base}/records/${rec.number}/samples`, { params: { start: new Date(s).toISOString(), end: new Date(end).toISOString(), limit: 5000 } });
+      const { data } = await api.get(`${base}/records/${rec.number}/samples`, { params: { start: new Date(s).toISOString(), end: new Date(end).toISOString(), limit: 20000 } });
       if (alive()) setRows(flat(data));
     } catch { /* ignore */ }
   }, [base, rec?.number, start, span], start === null ? 5000 : 0);
@@ -100,6 +108,8 @@ export const HistoryTrend = ({ p }) => {
       {start !== null && <input data-testid="history-start-input" type="datetime-local" value={toLocalInput(start)} onChange={(e) => e.target.value && setStart(new Date(e.target.value).getTime())} className="bg-transparent text-[10px] text-slate-300 font-mono w-36" />}
       <button data-testid="history-next" onClick={() => shift(1)} className={btn}>▶</button>
       <button data-testid="history-now" onClick={() => setStart(null)} className={`${btn} ${start === null ? "bg-blue-600 text-white" : ""}`}>NOW</button>
+      <span data-testid="history-span-label" className="text-[10px] font-mono text-slate-500">{prefs.span_value} {prefs.span_unit}</span>
+      <ChartSettings testid="history" prefs={prefs} onApply={save} onReset={reset} custom={custom} showStart />
     </div>
   );
   if (!rec) return <Frame title={p.title}><div className="h-full grid place-items-center text-xs text-slate-500 font-mono">Data record #{p.record_no} belum dibuat</div></Frame>;
