@@ -84,3 +84,10 @@ Extra: import photo, shape, font; widgets gauge, bar, history trend, chart trend
 - Trend Real-time: span saja, maksimal 7 hari (retensi tag_history).
 - Disimpan per perangkat/browser per widget (localStorage `scada-chart:<base>:<widgetId>`), Reset default kembali ke setting editor. Bisa dipakai semua operator.
 - File: frontend/src/components/widgets/ChartSettings.jsx, DataWidgets.jsx.
+
+## 2026-06 — Perbaikan Code Review Aman (DONE, agent-tested iteration_11)
+- Circular import drivers<->plc_ext dihapus: tipe/utility bersama dipindah ke backend/driver_common.py (drivers.py re-export).
+- Kredensial test dipindah ke env via backend/tests/creds.py (ADMIN_EMAIL, ADMIN_PASSWORD, TEST_CLIENT_PASSWORD di backend/.env).
+- Variabel possibly-undefined (tests/virtual_plcs.py) & closure dalam loop (tag_import.py) diperbaiki; variabel/import tak terpakai di test dibersihkan.
+- Dilewati atas pilihan user: refactor fungsi besar, random di simulator. Integrasi Gemini dibatalkan user.
+- Catatan: beberapa test lama (iteration2/3/6, backend_test) punya ekspektasi usang — bukan regresi.
