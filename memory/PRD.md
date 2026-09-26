@@ -77,3 +77,10 @@ Extra: import photo, shape, font; widgets gauge, bar, history trend, chart trend
 - Fase 2: raw-frame communication log page, backup schedule
 - Fase 3: Edge Gateway hybrid (cloud app + local agent with offline buffer), remote runtime access
 - P2: Scripts/expressions on tags, recipe management, WebSocket push
+
+## 2026-06 — Kustomisasi Chart Runtime (DONE, agent-tested iteration_10)
+- Tombol gear di header Trend Real-time & History Trend saat runtime.
+- Span manual + satuan min/hour/day; History Trend juga start date/time (Latest/Live atau tanggal & jam).
+- Trend Real-time: span saja, maksimal 7 hari (retensi tag_history).
+- Disimpan per perangkat/browser per widget (localStorage `scada-chart:<base>:<widgetId>`), Reset default kembali ke setting editor. Bisa dipakai semua operator.
+- File: frontend/src/components/widgets/ChartSettings.jsx, DataWidgets.jsx.

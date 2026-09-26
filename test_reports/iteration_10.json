@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 10 - Chart runtime kustomisasi (span + start time) for Trend real-time & History Trend widgets. Frontend-only Playwright end-to-end on published Demo 'ghdhbuxrp4e' (Utama has trend, Laporan has history). All gear buttons, panels, inputs, validation, apply, persistence (localStorage scada-chart:<base>:<widgetId>), reset, arrows, NOW behaved exactly as specified. No regressions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_flows": {
+    "trend_real_time": {
+      "gear_visible": true,
+      "panel_opens": true,
+      "no_start_controls": true,
+      "invalid_negative_error": "Span harus angka > 0",
+      "invalid_over_7_days_error": "Span maksimal 7 hari",
+      "valid_2h_indicator": true,
+      "history_request": "/api/public/ghdhbuxrp4e/rt/history?tags=...&minutes=120&limit=20000",
+      "persists_after_reload": true,
+      "reset_clears_indicator": true
+    },
+    "history_trend": {
+      "gear_visible": true,
+      "panel_all_controls_present": true,
+      "invalid_zero_error": "Span harus angka > 0",
+      "invalid_empty_error": "Span harus angka > 0",
+      "apply_2h_label": "2 hour",
+      "custom_indicator": true,
+      "samples_span_hours": 2.0,
+      "custom_start_datetime_reflected_in_history_start_input": "2026-01-05T10:00",
+      "prev_shifts_by_span": "2026-01-05T10:00 -> 2026-01-05T08:00",
+      "next_returns": true,
+      "NOW_hides_start_input_and_returns_live": true,
+      "persists_after_reload": true,
+      "reset_clears_indicator": true
+    }
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ChartSettings.jsx line 28: `maxMs / SPAN_MS.day` in the error message hardcodes 'hari' regardless of chosen unit. Fine because the constraint is currently only used by Trend with maxMs=7d, but if reused for min/hour caps the message would confuse users.",
+    "ChartSettings.jsx line 6 toLocalInput uses `new Date(ms - tz)` which is standard but may be off during DST transitions; consider `new Date(ms).toLocaleString('sv-SE').slice(0,16).replace(' ','T')` for safety.",
+    "DataWidgets.jsx line 50 (Trend): when user sets custom span, `win = span_value * SPAN_MS[unit]` is used for both the initial `/history` fetch (minutes = ceil(win/60000)) and the live-tail window filter. For very small spans (<1 min) the ceil rounds up to 1 min which is minor. OK.",
+    "DataWidgets.jsx HistoryTrend uses one useChartPrefs entry that stores span AND start together; toggling Latest ↔ custom is persisted, which is desired. Note: start is an absolute epoch, so a saved custom date will remain 'stuck in the past' after reload even weeks later — arguably intended per requirements but could surprise operators.",
+    "ChartSettings prevents apply when custom start is chosen but datetime is empty. Good. However, if the user picks 'Tanggal & jam' then leaves default `Date.now() - span`, no explicit error is thrown even though the seed value may be misleading; acceptable.",
+    "No max sanity check on History Trend span (only Trend limits to 7 days). Requesting e.g. 365 days will send a wide samples query; backend has limit=20000 which caps rows but the API call itself is unrestricted. Consider soft cap or warning."
+  ],
+  "updated_files": ["/app/test_reports/iteration_10.json"],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% of exercised flows"},
+  "test_credentials": "amoskun99@gmail.com / admin123 (only needed to inspect project; runtime is public since security_enabled=false)",
+  "seed_data_creation": "None. Used existing published project 'Demo Pengolahan Air' (slug ghdhbuxrp4e): Utama screen already has type=trend widget, Laporan screen already has type=history widget bound to record #1. localStorage entries created by test (scada-chart:...:<widgetId>) were cleared at end of run via history-settings-reset / trend-settings-reset.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Test-ids for chart customization: trend-settings-btn/-panel/-span-value/-span-unit/-settings-error/-settings-reset/-settings-apply/-custom-indicator (no start controls). history-settings-btn/-panel/-span-value/-span-unit/-start-latest/-start-custom/-start-datetime/-settings-error/-settings-reset/-settings-apply/-custom-indicator plus header controls history-prev/-next/-now/-start-input/-span-label. localStorage key pattern scada-chart:<baseUrl>:<widgetId>. Runtime for public app: /view/<slug> (published Demo slug=ghdhbuxrp4e). Screen switcher testid = runtime-screen-select (native <select>, use page.select_option label='Utama'|'Laporan'). Samples endpoint: /api/public/<slug>/rt/records/<n>/samples?start=ISO&end=ISO&limit=20000. Trend fetch: /api/public/<slug>/rt/history?tags=csv&minutes=<int>&limit=20000.",
+  "rca of the issue": "No bugs found. Feature complete and integration correct."
+}
